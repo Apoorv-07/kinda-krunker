@@ -12,6 +12,12 @@ export interface LobbyConfig {
   difficulty: Difficulty;
   scoreLimit: number;
   timeLimit: number;
+  /** multiplayer: 'ffa' = everyone hostile, 'teams' = your stack is a team */
+  teamMode?: "ffa" | "teams";
+  /** max players per stack/team */
+  stackSize?: number;
+  /** set when this lobby already has a host on the server */
+  hostPlayerId?: string | null;
 }
 
 export type MapId = "yard" | "neon" | "dusk";

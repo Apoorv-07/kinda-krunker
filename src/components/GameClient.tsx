@@ -8,6 +8,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EngineSettings, GameEngine, GameOverStats, HudSnapshot } from "@/lib/game/engine";
 import { LobbyConfig, WEAPON_ORDER } from "@/lib/game/config";
+import { MultiplayerClient, getPlayerId } from "@/lib/net/client";
+import type { HostSnapshot, NetBot, NetPlayer } from "@/lib/net/protocol";
 import { sfx } from "@/lib/game/audio";
 import {
   Announcement, Crosshair, DamageVignette, DeathOverlay, FpsCounter, GameOverOverlay,
@@ -19,9 +21,11 @@ interface Props {
   config: LobbyConfig;
   playerName: string;
   onExit: () => void;
+  /** present when this match is a live networked lobby */
+  net?: { playerId: string; stackId: string; teamMode: "ffa" | "teams"; myTeam: number };
 }
 
-export default function GameClient({ config, playerName, onExit }: Props) {
+export default function GameClient({ config, playerName, onExit, net }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [engine, setEngine] = useState<GameEngine | null>(null);
   const [hud, setHud] = useState<HudSnapshot | null>(null);
@@ -33,6 +37,16 @@ export default function GameClient({ config, playerName, onExit }: Props) {
   const [isMobile] = useState(
     () => typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768),
   );
+  const [roster, setRoster] = useState<NetPlayer[]>([]);
+  const [hostId, setHostId] = useState<string | null>(null);
+  const [netStatus, setNetStatus] = useState<string>("");
+  const netRef = useRef<MultiplayerClient | null>(null);
+  const hostFeedQueue = useRef<Array<{ text: string; head: boolean }>>([]);
+  const hostIsMeRef = useRef(false);
+  const snapTickRef = useRef(0);
+  const netPlayerIdRef = useRef<string>(net?.playerId ?? "");
+  const hudTimeLeftRef = useRef(config.timeLimit);
+  hudTimeLeftRef.current = hud?.timeLeft ?? config.timeLimit;
   const [settings, setSettings] = useState<EngineSettings>({
     sens: 1, fov: 92, volume: 0.7, autoFire: false,
   });
@@ -114,6 +128,88 @@ export default function GameClient({ config, playerName, onExit }: Props) {
   useEffect(() => {
     engine?.applySettings(settings);
   }, [engine, settings]);
+
+  // --- multiplayer lifecycle -------------------------------------------------
+  useEffect(() => {
+    if (!net || !engine) return;
+    const pid = net.playerId || getPlayerId();
+    netPlayerIdRef.current = pid;
+    const stackId = net.stackId;
+
+    const client = new MultiplayerClient(config.code, pid, stackId, {
+      onState: (players, bots, hId, lobby, teamScores) => {
+        setRoster(players);
+        setHostId(hId);
+        hostIsMeRef.current = hId === pid;
+        const sampleP = (id: string) => {
+          const it = client.playerInterp.get(id);
+          if (!it) return null;
+          const o = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+          it.sample(Date.now(), o);
+          return o;
+        };
+        const sampleB = (id: number) => {
+          const it = client.botInterp.get(id);
+          if (!it) return null;
+          const o = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0 };
+          it.sample(Date.now(), o);
+          return o;
+        };
+        engine.updateRemotePlayers({ players: players.map((p) => ({
+          playerId: p.playerId, name: p.name, color: p.color, team: p.team,
+          hp: p.hp, alive: p.alive, weapon: p.weapon as typeof WEAPON_ORDER[number],
+          kills: p.kills, deaths: p.deaths, score: p.score,
+        })), sampleOf: sampleP });
+        engine.updateNetBots({ bots: bots.map((b: NetBot) => ({
+          id: b.id, name: b.name, color: b.color, team: b.team,
+          hp: b.hp, alive: b.alive, kills: b.kills ?? 0, deaths: b.deaths ?? 0, score: b.score ?? 0,
+        })), sampleOf: sampleB });
+        void lobby; void teamScores;
+      },
+      onEvents: () => {},
+      onStatus: (st, detail) => setNetStatus(st === "error" ? detail ?? "error" : st),
+      onMatchOver: () => {},
+    });
+
+    // Engine → net wiring
+    engine.onReportHit = (targetId, dmg, head) => client.reportHit(targetId, dmg, head);
+    engine.onReportBotHit = (botId, dmg, head) => client.reportBotHit(botId, dmg, head);
+    client.readLocalFn = () => engine.netLocalState();
+    client.onDamage = (dmg, fromName, head) => engine.applyNetDamage(dmg, fromName, head);
+    client.onKillFeed = (text, head) => {
+      // remote feed lines are surfaced by the engine through the HUD hook below
+      hostFeedQueue.current.push({ text, head });
+    };
+    client.onBotHits = (hits) => {
+      for (const h of hits) engine.applyBotDamage(h.botId, h.dmg, h.head);
+    };
+    // Host publishes the world snapshot each tick.
+    client.snapshotProvider = () => {
+      let tick = snapTickRef.current + 1;
+      snapTickRef.current = tick;
+      const events: Array<{ seq: number; kind: string; to?: string; dmg?: number; head?: boolean; fromName?: string; text?: string }> = [];
+      // forward queued human hits + bot hits to the relay
+      for (const h of client.drainHits()) events.push(h);
+      const drained = engine.drainBotHitQueue();
+      for (const h of drained) events.push({ seq: -1, kind: "botdmg", ...h });
+      // forward feed
+      for (const f of hostFeedQueue.current) {
+        events.push({ seq: -1, kind: "feed", text: f.text, head: f.head });
+      }
+      hostFeedQueue.current = [];
+      return engine.buildSnapshot(tick, hudTimeLeftRef.current, events) as unknown as HostSnapshot;
+    };
+
+    netRef.current = client;
+    void client.join(playerName).then((r) => {
+      if (r.ok) client.start();
+    });
+
+    return () => {
+      client.stop();
+      netRef.current = null;
+    };
+  }, [net, engine, config.code, playerName]);
 
   // --- pause helpers -------------------------------------------------------
   const doPause = useCallback(() => {

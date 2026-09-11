@@ -23,6 +23,10 @@ export interface Ent {
   id: number;
   name: string;
   isBot: boolean;
+  /** networked human controlled by another browser */
+  remote?: boolean;
+  /** stable net id for remote players */
+  netId?: string;
   color: number;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
@@ -55,10 +59,48 @@ export interface Ent {
   hits: number;
   dmgDealt: number;
   bestStreak: number;
+  team?: number;
 }
 
 export interface FeedItem { id: number; text: string; head: boolean; mine: boolean }
-export interface Standing { name: string; color: number; kills: number; deaths: number; score: number; isPlayer: boolean }
+export interface MultiplayerConfig {
+  enabled: boolean;
+  playerId: string;
+  teamMode: "ffa" | "teams";
+  myTeam: number;
+  isHost: boolean;
+}
+
+export interface RemotePlayersInput {
+  players: Array<{
+    playerId: string; name: string; color: number; team: number;
+    hp: number; alive: boolean; weapon: WeaponId; kills: number; deaths: number; score: number;
+  }>;
+  sampleOf: (playerId: string) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
+}
+
+export interface NetBotsInput {
+  bots: Array<{
+    id: number; name: string; color: number; team: number;
+    hp: number; alive: boolean; kills?: number; deaths?: number; score?: number;
+  }>;
+  sampleOf: (id: number) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
+}
+
+const BOT_NAMES = (): string[] => [
+  "xX_Reaper_Xx", "NoScopeNina", "BlitzKrieg", "PixelPunisher", "TurboTommy",
+  "ShadowSniper", "Blastoise99", "CrateCrawler", "HeadshotHarry", "LagginLarry",
+  "NeonNemesis", "BoomBoomBetty", "QuickScopeQuin", "FragFred", "SneakySnek",
+  "BulletBill", "DoomDaisy", "VandalVince", "GhostGerry", "MayhemMia",
+];
+
+export interface Standing { name: string; color: number; kills: number; deaths: number; score: number; isPlayer: boolean; team?: number }
+
+/** Damage another client claims to have landed on one of my bots. */
+export interface NetEventIn { seq: number; kind: string; to?: string; from?: string; fromName?: string; dmg?: number; head?: boolean; text?: string }
+
+/** Damage a guest claims to have dealt to one of the host's bots. */
+export interface BotHitIn { botId: number; dmg: number; head: boolean }
 
 export interface HudSnapshot {
   state: MatchState;
@@ -607,6 +649,7 @@ export class GameEngine {
   }
 
   private standings(): Standing[] {
+    if (this.mpEnabled) return this.netStandings();
     const all: Ent[] = [this.player, ...this.bots];
     return all
       .map((e) => ({ name: e.name, color: e.color, kills: e.kills, deaths: e.deaths, score: e.score, isPlayer: !e.isBot }))
@@ -769,12 +812,13 @@ export class GameEngine {
       dir.z += (Math.random() - 0.5) * spreadBase * 2;
       dir.normalize();
 
-      // nearest entity
+      // nearest entity (bots + networked humans)
       let bestEnt: Ent | null = null;
       let bestEntT = Infinity;
       let bestHead = false;
-      for (const b of this.bots) {
+      for (const b of this.netTargets()) {
         if (!b.alive || b.spawnProtectT > 0) continue;
+        if (!this.canHurt(p, b)) continue;
         const hit = this.raycastEnt(b, eye.x, eye.y, eye.z, dir.x, dir.y, dir.z);
         if (hit && hit.t < bestEntT) { bestEntT = hit.t; bestEnt = b; bestHead = hit.head; }
       }
@@ -786,13 +830,30 @@ export class GameEngine {
         endDist = bestEntT;
         const dmg = Math.round(w.dmg * (bestHead ? w.headMul : 1));
         p.hits++;
-        this.damage(bestEnt, dmg, p, bestHead);
         const hx = eye.x + dir.x * bestEntT, hy = eye.y + dir.y * bestEntT, hz = eye.z + dir.z * bestEntT;
         this.fx.blood(hx, hy, hz);
-        if (bestEnt.alive) {
-          this.hitKind = bestHead ? 2 : 1;
-          this.hitKey++;
-          sfx.play(bestHead ? "headshot" : "hit");
+        // Networked humans are authoritative over their own health, so report
+        // the hit instead of applying it. Host-simulated bots stay local.
+        const netControlled = bestEnt.remote || (!this.mpIsHost && bestEnt.isBot);
+        if (netControlled) {
+          if (bestEnt.remote && bestEnt.netId && this.onReportHit) {
+            this.onReportHit(bestEnt.netId, dmg, bestHead);
+          } else if (bestEnt.isBot && this.onReportBotHit) {
+            this.onReportBotHit(bestEnt.id, dmg, bestHead);
+          }
+          p.dmgDealt += dmg;
+          if (bestEnt.alive) {
+            this.hitKind = bestHead ? 2 : 1;
+            this.hitKey++;
+            sfx.play(bestHead ? "headshot" : "hit");
+          }
+        } else {
+          this.damage(bestEnt, dmg, p, bestHead);
+          if (bestEnt.alive) {
+            this.hitKind = bestHead ? 2 : 1;
+            this.hitKey++;
+            sfx.play(bestHead ? "headshot" : "hit");
+          }
         }
       } else {
         endDist = worldT;
@@ -1254,6 +1315,11 @@ export class GameEngine {
     this.hudDirty = true;
   }
 
+  /** Wired by the host's net client: a hit on a networked human. */
+  onReportHit: ((targetPlayerId: string, dmg: number, head: boolean) => void) | null = null;
+  /** Wired by a guest's net client: a hit on a host-simulated bot. */
+  onReportBotHit: ((botId: number, dmg: number, head: boolean) => void) | null = null;
+
   resize = () => {
     const parent = this.canvas.parentElement;
     const w = parent?.clientWidth || window.innerWidth;
@@ -1262,13 +1328,303 @@ export class GameEngine {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   };
+
+  // =====================================================================
+  // MULTIPLAYER
+  // =====================================================================
+
+  private mpEnabled = false;
+  private mpIsHost = true;
+  private mpTeamMode: "ffa" | "teams" = "ffa";
+  private mpMyTeam = 0;
+  private remotes = new Map<string, Ent>();
+  /** bots created on a guest from the host's snapshot, keyed by host bot id */
+  private netBots = new Map<number, Ent>();
+  private netBotSeq = 10000;
+
+  get multiplayerActive(): boolean {
+    return this.mpEnabled;
+  }
+
+  /**
+   * Switch the engine into networked mode. On a guest the local bots are
+   * discarded — the host's snapshot is the source of truth for them.
+   */
+  initMultiplayer(cfg: MultiplayerConfig): void {
+    this.mpEnabled = true;
+    this.player.netId = cfg.playerId;
+    this.mpIsHost = cfg.isHost;
+    this.mpTeamMode = cfg.teamMode;
+    this.mpMyTeam = cfg.myTeam;
+    this.player.team = cfg.myTeam;
+    if (!cfg.isHost) {
+      // Guests don't simulate bots; they are created on demand from snapshots.
+      for (const b of this.bots) {
+        if (b.rig) this.scene.remove(b.rig.group);
+      }
+      this.bots = [];
+    }
+    this.markHud();
+  }
+
+  setHostRole(isHost: boolean): void {
+    this.mpIsHost = isHost;
+  }
+
+  /** Can attacker hurt target? Applies the team rules. */
+  private canHurt(attacker: Ent, target: Ent): boolean {
+    if (this.mpTeamMode === "ffa") return attacker !== target;
+    return attacker.team !== target.team;
+  }
+
+  /** Create (or refresh) the blocky rig for a networked human. */
+  private ensureRemote(id: string, name: string, color: number): Ent {
+    let e = this.remotes.get(id);
+    if (e) {
+      if (e.name !== name) {
+        e.name = name;
+        if (e.rig) {
+          this.scene.remove(e.rig.group);
+          e.rig = makeCharacter(name, color);
+          this.scene.add(e.rig.group);
+        }
+      }
+      return e;
+    }
+    e = {
+      id: this.netBotSeq++,
+      name,
+      isBot: false,
+      remote: true,
+      netId: id,
+      color,
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      yaw: 0, pitch: 0,
+      onGround: false, crouch: false,
+      slideT: 0, slideDir: new THREE.Vector3(),
+      hp: 100, alive: true, weapon: "ar",
+      ammo: this.freshAmmo(),
+      fireCd: 0, reloadT: 0,
+      kills: 0, deaths: 0, score: 0, streak: 0,
+      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
+      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+    };
+    e.rig = makeCharacter(name, color);
+    this.scene.add(e.rig.group);
+    this.remotes.set(id, e);
+    return e;
+  }
+
+  /** Called on every net tick with the roster + interpolated samples. */
+  updateRemotePlayers(input: RemotePlayersInput): void {
+    const seen = new Set<string>();
+    for (const p of input.players) {
+      if (p.playerId === this.player.netId) continue;
+      seen.add(p.playerId);
+      const e = this.ensureRemote(p.playerId, p.name, p.color);
+      e.team = p.team;
+      e.hp = p.hp;
+      e.alive = p.alive;
+      e.weapon = p.weapon;
+      e.kills = p.kills;
+      e.deaths = p.deaths;
+      e.score = p.score;
+      const s = input.sampleOf(p.playerId);
+      if (s) {
+        e.pos.set(s.x, s.y, s.z);
+        e.yaw = s.yaw;
+        e.pitch = s.pitch;
+      }
+      if (e.rig) {
+        const rig = e.rig;
+        rig.group.visible = true;
+        if (!p.alive) {
+          rig.fallT = 1;
+          rig.group.rotation.x = -Math.PI / 2;
+          rig.hpSprite.visible = false;
+        } else {
+          if (rig.fallT > 0) {
+            rig.fallT = 0;
+            rig.group.rotation.x = 0;
+            rig.lastHpDrawn = -1;
+          }
+          rig.hpSprite.visible = true;
+          rig.group.position.copy(e.pos);
+          rig.group.rotation.y = e.yaw;
+          updateCharacterAnim(rig, 2.2, e.pitch, 1 / 60);
+          drawHpBar(rig, p.hp, TUNE.maxHp);
+        }
+      }
+    }
+    // Remove players who left.
+    for (const [id, e] of [...this.remotes]) {
+      if (seen.has(id)) continue;
+      if (e.rig) this.scene.remove(e.rig.group);
+      this.remotes.delete(id);
+    }
+  }
+
+  /** Guest: build/refresh bots from the host's snapshot. */
+  updateNetBots(input: NetBotsInput): void {
+    const seen = new Set<number>();
+    for (const b of input.bots) {
+      seen.add(b.id);
+      let e = this.netBots.get(b.id);
+      if (!e) {
+        e = {
+          id: b.id, name: b.name, isBot: true, color: b.color,
+          pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+          yaw: 0, pitch: 0, onGround: false, crouch: false,
+          slideT: 0, slideDir: new THREE.Vector3(),
+          hp: b.hp, alive: b.alive, weapon: "ar",
+          ammo: this.freshAmmo(),
+          fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
+          lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+          input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
+          ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+        };
+        e.rig = makeCharacter(b.name, b.color);
+        this.scene.add(e.rig.group);
+        this.netBots.set(b.id, e);
+      }
+      e.team = b.team;
+      e.hp = b.hp;
+      e.alive = b.alive;
+      const s = input.sampleOf(b.id);
+      if (s) {
+        e.pos.set(s.x, s.y, s.z);
+        e.yaw = s.yaw;
+        e.pitch = s.pitch;
+      }
+      if (e.rig) {
+        const rig = e.rig;
+        rig.group.visible = true;
+        if (!b.alive) {
+          rig.fallT = 1;
+          rig.group.rotation.x = -Math.PI / 2;
+          rig.hpSprite.visible = false;
+        } else {
+          if (rig.fallT > 0) { rig.fallT = 0; rig.group.rotation.x = 0; rig.lastHpDrawn = -1; }
+          rig.hpSprite.visible = true;
+          rig.group.position.copy(e.pos);
+          rig.group.rotation.y = e.yaw;
+          updateCharacterAnim(rig, 2.0, e.pitch, 1 / 60);
+          drawHpBar(rig, b.hp, TUNE.maxHp);
+        }
+      }
+    }
+    for (const [id, e] of [...this.netBots]) {
+      if (seen.has(id)) continue;
+      if (e.rig) this.scene.remove(e.rig.group);
+      this.netBots.delete(id);
+    }
+  }
+
+  /** Everyone I can shoot right now. */
+  private netTargets(): Ent[] {
+    const out: Ent[] = [...this.remotes.values()];
+    out.push(...(this.mpIsHost ? this.bots : this.netBots.values()));
+    return out;
+  }
+
+  /** Apply damage another player claims to have dealt to me. */
+  applyNetDamage(dmg: number, fromName: string, head: boolean): void {
+    if (!this.player.alive || this.player.spawnProtectT > 0) return;
+    this.damage(this.player, dmg, this.mkProxy(fromName), head);
+  }
+
+  /** Host: apply damage a guest claims against one of my bots. */
+  private botHitQueue: BotHitIn[] = [];
+  applyBotDamage(botId: number, dmg: number, head: boolean): void {
+    const bot = this.bots.find((b) => b.id === botId);
+    if (!bot || !bot.alive || bot.spawnProtectT > 0) return;
+    this.damage(bot, dmg, this.mkProxy("player"), head);
+    if (bot.alive) {
+      this.hitKind = head ? 2 : 1;
+      this.hitKey++;
+    }
+  }
+  /** Consume guest damage claims so the net layer can relay attribution. */
+  drainBotHitQueue(): BotHitIn[] {
+    const out = this.botHitQueue;
+    this.botHitQueue = [];
+    return out;
+  }
+
+  /** Synonymous attacker used so feed/kill attribution has a name. */
+  private mkProxy(name: string): Ent {
+    const existing = this.proxyCache.get(name);
+    if (existing) return existing;
+    const proxy: Ent = {
+      id: this.netBotSeq++, name, isBot: false, remote: true, color: 0x94a3b8,
+      pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+      yaw: 0, pitch: 0, onGround: false, crouch: false,
+      slideT: 0, slideDir: new THREE.Vector3(),
+      hp: 1, alive: true, weapon: "ar", ammo: this.freshAmmo(),
+      fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
+      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
+      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+      team: this.mpTeamMode === "ffa" ? -1 : -2,
+    };
+    this.proxyCache.set(name, proxy);
+    return proxy;
+  }
+  private proxyCache = new Map<string, Ent>();
+
+  /** Live state handed to the net client each tick. */
+  netLocalState() {
+    const p = this.player;
+    return {
+      x: p.pos.x, y: p.pos.y, z: p.pos.z,
+      yaw: p.yaw, pitch: p.pitch,
+      hp: Math.ceil(p.hp), alive: p.alive,
+      weapon: p.weapon,
+      deaths: p.deaths,
+      streak: p.streak,
+    };
+  }
+
+  /**
+   * Host: assemble the world snapshot for the other players.
+   * `extraEvents` carries damage other players claimed against my bots.
+   */
+  buildSnapshot(tick: number, timeLeft: number, extraEvents: NetEventIn[]) {
+    const bots: Array<Record<string, unknown>> = this.mpIsHost
+      ? this.bots.map((b) => ({
+          id: b.id, name: b.name, color: b.color, team: b.team,
+          x: round2(b.pos.x), y: round2(b.pos.y), z: round2(b.pos.z),
+          yaw: round2(b.yaw), pitch: round2(b.pitch),
+          hp: Math.ceil(b.hp), alive: b.alive,
+          kills: b.kills, deaths: b.deaths, score: b.score,
+        }))
+      : [];
+    return {
+      tick,
+      bots,
+      events: extraEvents,
+      timeLeft: Math.ceil(timeLeft),
+    };
+  }
+
+  /** Scoreboard across humans (local + remote). */
+  netStandings(): Standing[] {
+    const rows: Standing[] = [
+      { name: this.player.name, color: this.player.color, kills: this.player.kills, deaths: this.player.deaths, score: this.player.score, isPlayer: true, team: this.player.team },
+    ];
+    for (const r of this.remotes.values()) {
+      rows.push({ name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, score: r.score, isPlayer: false, team: r.team });
+    }
+    const bots = this.mpIsHost ? this.bots : [...this.netBots.values()];
+    for (const b of bots) {
+      rows.push({ name: b.name, color: b.color, kills: b.kills, deaths: b.deaths, score: b.score, isPlayer: false, team: b.team });
+    }
+    return rows.sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
+  }
 }
 
-// bot names kept in a function so the import surface stays small
-const BOT_NAMES = (): string[] => [
-  "xX_Reaper_Xx", "NoScopeNina", "BlitzKrieg", "PixelPunisher", "TurboTommy",
-  "ShadowSniper", "Blastoise99", "CrateCrawler", "HeadshotHarry", "LagginLarry",
-  "NeonNemesis", "BoomBoomBetty", "QuickScopeQuin", "FragFred", "SneakySnek",
-  "BulletBill", "DoomDaisy", "VandalVince", "GhostGerry", "MayhemMia",
-  "TriggerToni", "RapidRoxie", "ClutchCarter", "SprayPraySam",
-];
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}

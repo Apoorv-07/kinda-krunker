@@ -7,9 +7,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Difficulty, LobbyConfig, MapId } from "@/lib/game/config";
+import { stackLabel } from "@/lib/net/protocol";
 
 interface MenuProps {
-  onJoin: (cfg: LobbyConfig, playerName: string) => void;
+  onJoin: (cfg: LobbyConfig, playerName: string, stackId?: string) => void;
 }
 
 interface ApiLobby {
@@ -19,6 +20,10 @@ interface ApiLobby {
   map: string;
   seed: number;
   botCount: number;
+  botFill?: number;
+  teamMode?: "ffa" | "teams";
+  stackSize?: number;
+  status?: string;
   difficulty: string;
   scoreLimit: number;
   timeLimit: number;
@@ -55,15 +60,17 @@ function normalizeLobby(row: ApiLobby): LobbyConfig {
     hostName: row.hostName,
     map,
     seed: row.seed,
-    botCount: row.botCount,
-    difficulty: row.difficulty as Difficulty,
+    botCount: row.botFill ?? row.botCount ?? 5,
+    difficulty: (row.difficulty as Difficulty) ?? "normal",
     scoreLimit: row.scoreLimit,
     timeLimit: row.timeLimit,
+    teamMode: (row.teamMode as "ffa" | "teams") ?? "ffa",
+    stackSize: row.stackSize ?? 5,
   };
 }
 
 export default function Menu({ onJoin }: MenuProps) {
-  const [tab, setTab] = useState<"play" | "custom" | "browse" | "scores" | "how">("play");
+  const [tab, setTab] = useState<"play" | "party" | "custom" | "browse" | "scores" | "how">("play");
   const [name, setName] = useState<string>("");
   const [activeCount, setActiveCount] = useState<number>(0);
   const [lobbies, setLobbies] = useState<ApiLobby[]>([]);
@@ -71,6 +78,7 @@ export default function Menu({ onJoin }: MenuProps) {
   const [localScores, setLocalScores] = useState<Array<{ name: string; score: number; kills: number; deaths: number; date: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [offline, setOffline] = useState(false);
 
   // custom form
   const [lobbyName, setLobbyName] = useState("");
@@ -79,6 +87,13 @@ export default function Menu({ onJoin }: MenuProps) {
   const [diff, setDiff] = useState<Difficulty>("normal");
   const [scoreLimit, setScoreLimit] = useState(25);
   const [timeLimit, setTimeLimit] = useState(300);
+  // party + team options
+  const [teamMode, setTeamMode] = useState<"ffa" | "teams">("teams");
+  const [stackSize, setStackSize] = useState(5);
+  const [partyCode, setPartyCode] = useState("");
+  const [partyStackId, setPartyStackId] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [partyMsg, setPartyMsg] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem("bs_name");
@@ -101,38 +116,83 @@ export default function Menu({ onJoin }: MenuProps) {
     localStorage.setItem("bs_name", v);
   };
 
+  // Builds a playable arena entirely on the client. Used as a fallback when the
+  // leaderboard/lobby API is unreachable, so the core loop is never blocked.
+  const offlineLobby = useCallback(
+    (partial: { name: string; map: MapId | "random"; botCount: number; difficulty: Difficulty; scoreLimit: number; timeLimit: number }) => {
+      const maps: MapId[] = ["yard", "neon", "dusk"];
+      const seed = Math.floor(Math.random() * 1_000_000_000);
+      const map: MapId = partial.map === "random" ? maps[Math.abs(seed) % 3] : partial.map;
+      const code = Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+      const cfg: LobbyConfig = {
+        code,
+        name: partial.name,
+        hostName: name || "Player",
+        map,
+        seed,
+        botCount: partial.botCount,
+        difficulty: partial.difficulty,
+        scoreLimit: partial.scoreLimit,
+        timeLimit: partial.timeLimit,
+      };
+      setOffline(true);
+      onJoin(cfg, name || "Player", partyStackId ?? undefined);
+    },
+    [name, onJoin],
+  );
+
   const createLobby = useCallback(
-    async (body: Record<string, unknown>) => {
+    async (body: Record<string, unknown>, allowOfflineFallback = false) => {
       setLoading(true);
       setError("");
       try {
         const res = await fetch("/api/lobbies", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hostName: name || "Player", ...body }),
+          body: JSON.stringify({
+          hostName: name || "Player", ...body,
+          teamMode: teamMode,
+          stackSize: stackSize,
+          stackId: partyStackId ?? undefined,
+        }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to create lobby");
-        onJoin(normalizeLobby(data.lobby), name || "Player");
+        onJoin(normalizeLobby(data.lobby), name || "Player", partyStackId ?? undefined);
       } catch (e) {
-        setError(String(e));
+        // The match itself needs no database — fall back so play is never blocked.
+        if (allowOfflineFallback) {
+          offlineLobby({
+            name: String(body.name ?? "Offline Arena").slice(0, 32),
+            map: (body.map as MapId | "random") ?? "random",
+            botCount: Number(body.botCount ?? 5),
+            difficulty: (body.difficulty as Difficulty) ?? "normal",
+            scoreLimit: Number(body.scoreLimit ?? 25),
+            timeLimit: Number(body.timeLimit ?? 300),
+          });
+          return;
+        }
+        setError(friendlyError(e));
       } finally {
         setLoading(false);
       }
     },
-    [name, onJoin],
+    [name, onJoin, offlineLobby],
   );
 
   const quickPlay = () => {
     const names = ["Quick Drop", "Rumble Pit", "Night Ops", "Crate Chaos", "No Scope Lounge", "Turbo Arena", "Block Party", "Frag Fest"];
-    void createLobby({
-      name: names[Math.floor(Math.random() * names.length)],
-      map: "random",
-      botCount: 5,
-      difficulty: "normal",
-      scoreLimit: 25,
-      timeLimit: 300,
-    });
+    void createLobby(
+      {
+        name: names[Math.floor(Math.random() * names.length)],
+        map: "random",
+        botCount: 5,
+        difficulty: "normal",
+        scoreLimit: 25,
+        timeLimit: 300,
+      },
+      true,
+    );
   };
 
   const joinLobby = async (code: string) => {
@@ -142,7 +202,7 @@ export default function Menu({ onJoin }: MenuProps) {
       const res = await fetch(`/api/lobbies/${code}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Lobby not found");
-      onJoin(normalizeLobby(data.lobby), name || "Player");
+      onJoin(normalizeLobby(data.lobby), name || "Player", partyStackId ?? undefined);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -192,6 +252,7 @@ export default function Menu({ onJoin }: MenuProps) {
 
   const tabs: Array<{ id: typeof tab; label: string }> = [
     { id: "play", label: "Quick Play" },
+    { id: "party", label: "Play with Friends" },
     { id: "custom", label: "Create Lobby" },
     { id: "browse", label: "Lobby List" },
     { id: "scores", label: "Leaderboard" },
@@ -234,6 +295,11 @@ export default function Menu({ onJoin }: MenuProps) {
               <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
               <span className="text-xs font-bold text-white/70">{activeCount} lobb{activeCount === 1 ? "y" : "ies"} recent</span>
             </div>
+            {offline && (
+              <div className="rounded-full border border-amber-400/40 bg-amber-400/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-300">
+                Offline arena
+              </div>
+            )}
             <input
               value={name}
               onChange={(e) => saveName(e.target.value.slice(0, 16))}
@@ -286,6 +352,198 @@ export default function Menu({ onJoin }: MenuProps) {
                     <div className="text-[10px] font-bold uppercase tracking-widest text-white/50">{l}</div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {tab === "party" && (
+            <div className="mx-auto grid max-w-3xl gap-4 md:grid-cols-2">
+              {/* stack size */}
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-5">
+                <h2 className="text-xs font-black uppercase tracking-[0.3em] text-amber-300">Your stack</h2>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/45">
+                  How many of you are playing together
+                </p>
+                <div className="mt-3 grid grid-cols-5 gap-1.5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => { setStackSize(n); if (n === 1) setPartyStackId(null); }}
+                      className={`rounded-lg border px-1 py-3 text-center transition ${
+                        stackSize === n ? "border-amber-400 bg-amber-400/15" : "border-white/15 bg-white/5 hover:bg-white/10"
+                      }`}
+                    >
+                      <div className="text-lg font-black text-white">{n}</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wide text-white/50">{stackLabel(n)}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <h2 className="mt-5 text-xs font-black uppercase tracking-[0.3em] text-amber-300">Mode</h2>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {([
+                    { id: "teams", label: "Teams", desc: "Your stack vs the others" },
+                    { id: "ffa", label: "Free-for-all", desc: "Everyone vs everyone" },
+                  ] as const).map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setTeamMode(m.id)}
+                      className={`rounded-lg border px-3 py-2 text-left transition ${
+                        teamMode === m.id ? "border-amber-400 bg-amber-400/15" : "border-white/15 bg-white/5 hover:bg-white/10"
+                      }`}
+                    >
+                      <div className="text-xs font-black text-white">{m.label}</div>
+                      <div className="text-[9px] font-bold uppercase tracking-wide text-white/45">{m.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-white/60">Bots</label>
+                    <input type="range" min={0} max={7} step={1} value={bots} onChange={(e) => setBots(Number(e.target.value))} className="w-full accent-amber-400" />
+                    <div className="text-center text-[10px] font-bold text-amber-300">{bots}</div>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-white/60">Kill target</label>
+                    <div className="flex gap-1.5">
+                      {[15, 25, 40].map((sc) => (
+                        <button key={sc} onClick={() => setScoreLimit(sc)}
+                          className={`flex-1 rounded-lg border px-1 py-2 text-xs font-black transition ${
+                            scoreLimit === sc ? "border-amber-400 bg-amber-400/15 text-amber-300" : "border-white/15 bg-white/5 text-white/70"
+                          }`}>{sc}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() =>
+                    void createLobby({
+                      name: `${(name || "Player").trim()}\'s ${stackLabel(stackSize)} Match`,
+                      map: mapSel, teamMode, stackSize, botFill: bots,
+                      difficulty: diff, scoreLimit, timeLimit,
+                      stackId: partyStackId ?? undefined,
+                    }, true)
+                  }
+                  disabled={loading || !name.trim()}
+                  className="menu-btn-primary mt-5 w-full rounded-xl px-6 py-3.5 text-sm font-black uppercase tracking-widest text-black transition active:scale-95 disabled:opacity-50"
+                >
+                  {loading ? "Creating…" : stackSize === 1 ? "▶ Start Solo Match" : `▶ Create ${stackLabel(stackSize)} Match`}
+                </button>
+                {stackSize > 1 && !partyStackId && (
+                  <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-amber-300/80">
+                    Create a party code below and share it so your friends spawn on your team
+                  </p>
+                )}
+              </div>
+
+              {/* party code */}
+              <div className="rounded-2xl border border-white/10 bg-black/40 p-5">
+                <h2 className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Party code</h2>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/45">
+                  Friends enter this to join your stack
+                </p>
+
+                {partyStackId ? (
+                  <div className="mt-4">
+                    <div className="rounded-xl border-2 border-dashed border-cyan-400/60 bg-cyan-400/10 px-4 py-5 text-center">
+                      <div className="font-mono text-3xl font-black tracking-[0.3em] text-cyan-300">{partyCode}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-white/50">share this code</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(partyCode);
+                        setPartyMsg("Copied!");
+                        window.setTimeout(() => setPartyMsg(""), 1500);
+                      }}
+                      className="mt-3 w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs font-black uppercase tracking-wider text-white transition hover:bg-white/20 active:scale-95"
+                    >
+                      Copy code
+                    </button>
+                    <button
+                      onClick={() => { setPartyStackId(null); setPartyCode(""); setPartyMsg("Left the party"); }}
+                      className="mt-2 w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wider text-white/70 transition hover:bg-white/10"
+                    >
+                      Leave party
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setLoading(true); setPartyMsg("");
+                      try {
+                        const res = await fetch("/api/parties", {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "create", leaderName: name || "Player" }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Could not create party");
+                        setPartyCode(data.party.code);
+                        setPartyStackId(data.party.stackId);
+                        setPartyMsg("Party created — share the code!");
+                      } catch (e) {
+                        setPartyMsg(friendlyError(e));
+                      } finally { setLoading(false); }
+                    }}
+                    disabled={loading || !name.trim()}
+                    className="mt-4 w-full rounded-xl bg-cyan-400 px-4 py-3 text-sm font-black uppercase tracking-widest text-black transition hover:bg-cyan-300 active:scale-95 disabled:opacity-50"
+                  >
+                    + Create party
+                  </button>
+                )}
+
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/70">Join a friend</h3>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={joinCode}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 5))}
+                      placeholder="CODE"
+                      className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-center font-mono text-lg font-black tracking-[0.25em] outline-none placeholder:text-white/30 focus:border-cyan-400/70"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!joinCode.trim()) return;
+                        setLoading(true); setPartyMsg("");
+                        try {
+                          const res = await fetch("/api/parties", {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "join", code: joinCode }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || "Party not found");
+                          setPartyCode(data.party.code);
+                          setPartyStackId(data.party.stackId);
+                          setStackSize(Math.max(stackSize, 2));
+                          setPartyMsg(`Joined ${data.party.leaderName}\'s party!`);
+                        } catch (e) {
+                          setPartyMsg(friendlyError(e));
+                        } finally { setLoading(false); }
+                      }}
+                      disabled={loading || joinCode.length < 4}
+                      className="shrink-0 rounded-lg bg-cyan-400 px-4 py-2 text-xs font-black uppercase tracking-wider text-black transition hover:bg-cyan-300 active:scale-95 disabled:opacity-50"
+                    >
+                      Join
+                    </button>
+                  </div>
+                </div>
+
+                {partyMsg && (
+                  <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold text-white/75">
+                    {partyMsg}
+                  </div>
+                )}
+
+                <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-white/50">How it works</div>
+                  <ul className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-white/60">
+                    <li>• Create a match, then send friends the <b className="text-amber-300">lobby code</b> from the waiting room.</li>
+                    <li>• In <b>Teams</b> mode everyone with your party code spawns on your side.</li>
+                    <li>• Bots fill empty slots, so a match is never waiting on people.</li>
+                    <li>• If the host leaves, the next player takes over the match automatically.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}
@@ -385,7 +643,7 @@ export default function Menu({ onJoin }: MenuProps) {
                       difficulty: diff,
                       scoreLimit,
                       timeLimit,
-                    })
+                    }, true)
                   }
                   disabled={loading || !name.trim()}
                   className="menu-btn-primary w-full rounded-xl px-6 py-3.5 text-sm font-black uppercase tracking-widest text-black transition active:scale-95 disabled:opacity-50"
@@ -498,6 +756,25 @@ export default function Menu({ onJoin }: MenuProps) {
       </div>
     </div>
   );
+}
+
+/** Turn raw server errors into something a player can act on. */
+function friendlyError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  const s = raw.toLowerCase();
+  if (s.includes("database_url") || s.includes("no database connection") || s.includes("connection string")) {
+    return "Database not connected. Set DATABASE_URL in Vercel → Settings → Environment Variables, then REDEPLOY (new env vars never affect an existing deployment). Quick Play still works offline.";
+  }
+  if (s.includes("does not exist") || s.includes("relation")) {
+    return "Database connected, but the tables are missing. Run schema.sql in your database's SQL editor once.";
+  }
+  if (s.includes("password authentication") || s.includes("role") || s.includes("permission")) {
+    return "Database rejected the credentials. Check that DATABASE_URL is the current connection string for this database.";
+  }
+  if (s.includes("fetch") || s.includes("network") || s.includes("failed to fetch")) {
+    return "Could not reach the server. Check your connection and try again.";
+  }
+  return raw.replace(/^Error:\s*/i, "").slice(0, 220);
 }
 
 function Key({ children }: { children: React.ReactNode }) {
