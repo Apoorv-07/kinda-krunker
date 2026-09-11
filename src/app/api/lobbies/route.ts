@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { lobbies } from "@/db/schema";
 import { desc, sql, like } from "drizzle-orm";
 
@@ -23,6 +23,7 @@ function makeSeed(): number {
 
 export async function GET() {
   try {
+    const db = getDb();
     const rows = await db
       .select()
       .from(lobbies)
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
     const scoreLimit = SCORE_LIMITS.includes(Number(body.scoreLimit)) ? Number(body.scoreLimit) : 25;
     const timeLimit = TIME_LIMITS.includes(Number(body.timeLimit)) ? Number(body.timeLimit) : 300;
 
+    const db = getDb();
     // Unique code, retry on collision.
     let code = makeCode();
     for (let i = 0; i < 5; i++) {
@@ -69,5 +71,3 @@ export async function POST(req: Request) {
     return Response.json({ error: String(err) }, { status: 500 });
   }
 }
-
-
