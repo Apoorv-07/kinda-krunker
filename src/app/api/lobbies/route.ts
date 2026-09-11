@@ -1,6 +1,6 @@
-import { getDb } from "@/db";
+import { getDb, dbErrorMessage } from "@/db";
 import { lobbies } from "@/db/schema";
-import { desc, sql, like } from "drizzle-orm";
+import { desc, sql, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ function makeSeed(): number {
 
 export async function GET() {
   try {
-    const db = getDb();
+    const db = await getDb();
     const rows = await db
       .select()
       .from(lobbies)
@@ -35,7 +35,7 @@ export async function GET() {
       .where(sql`created_at > now() - interval '10 minutes'`);
     return Response.json({ lobbies: rows, activeCount: Number(recent?.n ?? 0) });
   } catch (err) {
-    return Response.json({ lobbies: [], activeCount: 0, error: String(err) }, { status: 500 });
+    return Response.json({ lobbies: [], activeCount: 0, error: dbErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -51,11 +51,11 @@ export async function POST(req: Request) {
     const scoreLimit = SCORE_LIMITS.includes(Number(body.scoreLimit)) ? Number(body.scoreLimit) : 25;
     const timeLimit = TIME_LIMITS.includes(Number(body.timeLimit)) ? Number(body.timeLimit) : 300;
 
-    const db = getDb();
+    const db = await getDb();
     // Unique code, retry on collision.
     let code = makeCode();
     for (let i = 0; i < 5; i++) {
-      const existing = await db.select({ id: lobbies.id }).from(lobbies).where(like(lobbies.code, code));
+      const existing = await db.select({ id: lobbies.id }).from(lobbies).where(eq(lobbies.code, code));
       if (existing.length === 0) break;
       code = makeCode();
     }
@@ -68,6 +68,6 @@ export async function POST(req: Request) {
 
     return Response.json({ lobby: row }, { status: 201 });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 500 });
+    return Response.json({ error: dbErrorMessage(err) }, { status: 500 });
   }
 }

@@ -1,4 +1,4 @@
-import { getDb } from "@/db";
+import { getDb, dbErrorMessage } from "@/db";
 import { scores } from "@/db/schema";
 import { desc } from "drizzle-orm";
 
@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const db = getDb();
+    const db = await getDb();
     const rows = await db
       .select()
       .from(scores)
@@ -14,7 +14,7 @@ export async function GET() {
       .limit(10);
     return Response.json({ scores: rows });
   } catch (err) {
-    return Response.json({ scores: [], error: String(err) }, { status: 500 });
+    return Response.json({ scores: [], error: dbErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const deaths = Math.max(0, Math.floor(Number(body.deaths) || 0));
     const map = String(body.map ?? "random").slice(0, 20);
 
-    const db = getDb();
+    const db = await getDb();
     const [row] = await db
       .insert(scores)
       .values({ name, score, kills, deaths, map })
@@ -35,6 +35,6 @@ export async function POST(req: Request) {
 
     return Response.json({ score: row }, { status: 201 });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 500 });
+    return Response.json({ error: dbErrorMessage(err) }, { status: 500 });
   }
 }
