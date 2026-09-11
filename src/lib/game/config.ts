@@ -32,11 +32,35 @@ export const MAP_LABEL: Record<MapId, string> = {
 
 export const DIFFICULTY_TUNING: Record<
   Difficulty,
-  { react: number; spread: number; fireDelay: number; dmgMul: number; label: string }
+  {
+    react: number;
+    spread: number;
+    fireDelay: number;
+    dmgMul: number;
+    label: string;
+  }
 > = {
-  easy: { react: 0.55, spread: 0.16, fireDelay: 0.34, dmgMul: 0.7, label: "Easy" },
-  normal: { react: 0.32, spread: 0.09, fireDelay: 0.22, dmgMul: 1.0, label: "Normal" },
-  hard: { react: 0.16, spread: 0.05, fireDelay: 0.15, dmgMul: 1.25, label: "Hard" },
+  easy: {
+    react: 0.55,
+    spread: 0.16,
+    fireDelay: 0.34,
+    dmgMul: 0.7,
+    label: "Easy",
+  },
+  normal: {
+    react: 0.32,
+    spread: 0.09,
+    fireDelay: 0.22,
+    dmgMul: 1.0,
+    label: "Normal",
+  },
+  hard: {
+    react: 0.16,
+    spread: 0.05,
+    fireDelay: 0.15,
+    dmgMul: 1.25,
+    label: "Hard",
+  },
 };
 
 export interface WeaponDef {
@@ -59,40 +83,107 @@ export interface WeaponDef {
 
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   ar: {
-    id: "ar", name: "VANDAL AR", dmg: 18, headMul: 2, mag: 30, reserve: 150,
-    rpm: 600, reload: 1.6, spread: 0.016, moveSpread: 0.03, adsFov: 60,
-    pellets: 1, auto: true, zoomMul: 0.72, range: 120,
+    id: "ar",
+    name: "VANDAL AR",
+    dmg: 18,
+    headMul: 2,
+    mag: 30,
+    reserve: 150,
+    rpm: 600,
+    reload: 1.6,
+    spread: 0.016,
+    moveSpread: 0.03,
+    adsFov: 60,
+    pellets: 1,
+    auto: true,
+    zoomMul: 0.72,
+    range: 120,
   },
   smg: {
-    id: "smg", name: "VIPER SMG", dmg: 11, headMul: 1.8, mag: 40, reserve: 200,
-    rpm: 920, reload: 1.4, spread: 0.03, moveSpread: 0.035, adsFov: 65,
-    pellets: 1, auto: true, zoomMul: 0.8, range: 70,
+    id: "smg",
+    name: "VIPER SMG",
+    dmg: 11,
+    headMul: 1.8,
+    mag: 40,
+    reserve: 200,
+    rpm: 920,
+    reload: 1.4,
+    spread: 0.03,
+    moveSpread: 0.035,
+    adsFov: 65,
+    pellets: 1,
+    auto: true,
+    zoomMul: 0.8,
+    range: 70,
   },
   shotgun: {
-    id: "shotgun", name: "BOOMER SG", dmg: 8, headMul: 1.5, mag: 6, reserve: 48,
-    rpm: 82, reload: 2.2, spread: 0.075, moveSpread: 0.02, adsFov: 70,
-    pellets: 8, auto: false, zoomMul: 0.9, range: 45,
+    id: "shotgun",
+    name: "BOOMER SG",
+    dmg: 8,
+    headMul: 1.5,
+    mag: 6,
+    reserve: 48,
+    rpm: 82,
+    reload: 2.2,
+    spread: 0.075,
+    moveSpread: 0.02,
+    adsFov: 70,
+    pellets: 8,
+    auto: false,
+    zoomMul: 0.9,
+    range: 45,
   },
   sniper: {
-    id: "sniper", name: "RAILGUN .50", dmg: 85, headMul: 2, mag: 5, reserve: 25,
-    rpm: 52, reload: 2.4, spread: 0.002, moveSpread: 0.08, adsFov: 26,
-    pellets: 1, auto: false, zoomMul: 0.3, range: 300,
+    id: "sniper",
+    name: "RAILGUN .50",
+    dmg: 85,
+    headMul: 2,
+    mag: 5,
+    reserve: 25,
+    rpm: 52,
+    reload: 2.4,
+    spread: 0.002,
+    moveSpread: 0.08,
+    adsFov: 26,
+    pellets: 1,
+    auto: false,
+    zoomMul: 0.3,
+    range: 300,
   },
 };
 
 export const WEAPON_ORDER: WeaponId[] = ["ar", "smg", "shotgun", "sniper"];
 
 export const BOT_NAMES = [
-  "xX_Reaper_Xx", "NoScopeNina", "BlitzKrieg", "PixelPunisher", "TurboTommy",
-  "ShadowSniper", "Blastoise99", "CrateCrawler", "HeadshotHarry", "LagginLarry",
-  "NeonNemesis", "BoomBoomBetty", "QuickScopeQuin", "FragFred", "SneakySnek",
-  "BulletBill", "DoomDaisy", "VandalVince", "GhostGerry", "MayhemMia",
-  "TriggerToni", "RapidRoxie", "ClutchCarter", "SprayPraySam",
+  "xX_Reaper_Xx",
+  "NoScopeNina",
+  "BlitzKrieg",
+  "PixelPunisher",
+  "TurboTommy",
+  "ShadowSniper",
+  "Blastoise99",
+  "CrateCrawler",
+  "HeadshotHarry",
+  "LagginLarry",
+  "NeonNemesis",
+  "BoomBoomBetty",
+  "QuickScopeQuin",
+  "FragFred",
+  "SneakySnek",
+  "BulletBill",
+  "DoomDaisy",
+  "VandalVince",
+  "GhostGerry",
+  "MayhemMia",
+  "TriggerToni",
+  "RapidRoxie",
+  "ClutchCarter",
+  "SprayPraySam",
 ];
 
 export const BOT_COLORS = [
-  0xef4444, 0x3b82f6, 0x22c55e, 0xeab308, 0xa855f7,
-  0xec4899, 0x06b6d4, 0xf97316, 0x84cc16, 0x14b8a6,
+  0xef4444, 0x3b82f6, 0x22c55e, 0xeab308, 0xa855f7, 0xec4899, 0x06b6d4,
+  0xf97316, 0x84cc16, 0x14b8a6,
 ];
 
 // --- tuning ---------------------------------------------------------------
@@ -123,11 +214,13 @@ export const TUNE = {
 export type MatchState = "warmup" | "playing" | "paused" | "ended";
 
 // --- math utils (allocation-free where it matters) -------------------------
-export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+export const clamp = (v: number, lo: number, hi: number) =>
+  v < lo ? lo : v > hi ? hi : v;
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const damp = (a: number, b: number, lambda: number, dt: number) =>
   lerp(a, b, 1 - Math.exp(-lambda * dt));
-export const randRange = (rng: () => number, lo: number, hi: number) => lo + rng() * (hi - lo);
+export const randRange = (rng: () => number, lo: number, hi: number) =>
+  lo + rng() * (hi - lo);
 
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;

@@ -175,9 +175,8 @@ export interface JoinResponse {
 }
 
 export const PLAYER_COLORS = [
-  0x3ddc84, 0xef4444, 0x3b82f6, 0xeab308, 0xa855f7,
-  0xec4899, 0x06b6d4, 0xf97316, 0x84cc16, 0x14b8a6,
-  0xf43f5e, 0x8b5cf6,
+  0x3ddc84, 0xef4444, 0x3b82f6, 0xeab308, 0xa855f7, 0xec4899, 0x06b6d4,
+  0xf97316, 0x84cc16, 0x14b8a6, 0xf43f5e, 0x8b5cf6,
 ];
 
 export const BOT_COLORS = [
@@ -186,12 +185,36 @@ export const BOT_COLORS = [
 ];
 
 export const BOT_NAMES = [
-  "xX_Reaper_Xx", "NoScopeNina", "BlitzKrieg", "PixelPunisher", "TurboTommy",
-  "ShadowSniper", "Blastoise99", "CrateCrawler", "HeadshotHarry", "LagginLarry",
-  "NeonNemesis", "BoomBoomBetty", "QuickScopeQuin", "FragFred", "SneakySnek",
-  "BulletBill", "DoomDaisy", "VandalVince", "GhostGerry", "MayhemMia",
+  "xX_Reaper_Xx",
+  "NoScopeNina",
+  "BlitzKrieg",
+  "PixelPunisher",
+  "TurboTommy",
+  "ShadowSniper",
+  "Blastoise99",
+  "CrateCrawler",
+  "HeadshotHarry",
+  "LagginLarry",
+  "NeonNemesis",
+  "BoomBoomBetty",
+  "QuickScopeQuin",
+  "FragFred",
+  "SneakySnek",
+  "BulletBill",
+  "DoomDaisy",
+  "VandalVince",
+  "GhostGerry",
+  "MayhemMia",
 ];
 
 export function stackLabel(size: number): string {
-  return size === 1 ? "Solo" : size === 2 ? "Duo" : size === 3 ? "Trio" : size === 4 ? "Squad" : "5-Stack";
+  return size === 1
+    ? "Solo"
+    : size === 2
+      ? "Duo"
+      : size === 3
+        ? "Trio"
+        : size === 4
+          ? "Squad"
+          : "5-Stack";
 }

@@ -66,10 +66,22 @@ class ParticlePool {
     this.baseAlpha = new Float32Array(cap);
 
     this.geo = new THREE.BufferGeometry();
-    this.geo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geo.setAttribute("aColor", new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geo.setAttribute("aSize", new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
-    this.geo.setAttribute("aAlpha", new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute(
+      "position",
+      new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage),
+    );
+    this.geo.setAttribute(
+      "aColor",
+      new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage),
+    );
+    this.geo.setAttribute(
+      "aSize",
+      new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage),
+    );
+    this.geo.setAttribute(
+      "aAlpha",
+      new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage),
+    );
 
     const mat = new THREE.ShaderMaterial({
       vertexShader: PARTICLE_VERT,
@@ -85,16 +97,26 @@ class ParticlePool {
   }
 
   burst(
-    x: number, y: number, z: number,
-    color: THREE.Color, count: number,
-    speed: number, size: number, life: number,
-    gravity = 12, drag = 2.5, spreadY = 1, alpha = 1,
+    x: number,
+    y: number,
+    z: number,
+    color: THREE.Color,
+    count: number,
+    speed: number,
+    size: number,
+    life: number,
+    gravity = 12,
+    drag = 2.5,
+    spreadY = 1,
+    alpha = 1,
   ) {
     for (let i = 0; i < count; i++) {
       const idx = this.head;
       this.head = (this.head + 1) % this.life.length;
       const i3 = idx * 3;
-      this.pos[i3] = x; this.pos[i3 + 1] = y; this.pos[i3 + 2] = z;
+      this.pos[i3] = x;
+      this.pos[i3 + 1] = y;
+      this.pos[i3 + 2] = z;
       const a = Math.random() * Math.PI * 2;
       const up = (Math.random() - 0.2) * spreadY;
       const s = speed * (0.35 + Math.random() * 0.85);
@@ -141,10 +163,14 @@ class ParticlePool {
       this.alpha[i] = this.baseAlpha[i] * t;
       this.size[i] = this.baseSize[i] * (0.5 + t * 0.5);
     }
-    (this.geo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.getAttribute("aColor") as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.getAttribute("aSize") as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.getAttribute("aAlpha") as THREE.BufferAttribute).needsUpdate = true;
+    (this.geo.getAttribute("position") as THREE.BufferAttribute).needsUpdate =
+      true;
+    (this.geo.getAttribute("aColor") as THREE.BufferAttribute).needsUpdate =
+      true;
+    (this.geo.getAttribute("aSize") as THREE.BufferAttribute).needsUpdate =
+      true;
+    (this.geo.getAttribute("aAlpha") as THREE.BufferAttribute).needsUpdate =
+      true;
   }
 }
 
@@ -179,16 +205,28 @@ export class FxSystem {
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
-    this.sparks = new ParticlePool(scene, THREE.AdditiveBlending, MAX_PARTICLES);
+    this.sparks = new ParticlePool(
+      scene,
+      THREE.AdditiveBlending,
+      MAX_PARTICLES,
+    );
     this.smoke = new ParticlePool(scene, THREE.NormalBlending, 220);
 
     // tracer pool
     for (let i = 0; i < MAX_TRACERS; i++) {
       const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3).setUsage(THREE.DynamicDrawUsage));
+      geo.setAttribute(
+        "position",
+        new THREE.BufferAttribute(new Float32Array(6), 3).setUsage(
+          THREE.DynamicDrawUsage,
+        ),
+      );
       const mat = new THREE.LineBasicMaterial({
-        color: 0xffd27a, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false,
+        color: 0xffd27a,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
       });
       const line = new THREE.Line(geo, mat);
       line.frustumCulled = false;
@@ -201,8 +239,12 @@ export class FxSystem {
     const flashGeo = new THREE.PlaneGeometry(0.34, 0.34);
     for (let i = 0; i < MAX_FLASHES; i++) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0xffcf80, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        color: 0xffcf80,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(flashGeo, mat);
       mesh.visible = false;
@@ -216,8 +258,12 @@ export class FxSystem {
     const ringGeo = new THREE.RingGeometry(0.55, 0.8, 32);
     for (let i = 0; i < MAX_RINGS; i++) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x00e5ff, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
       });
       const mesh = new THREE.Mesh(ringGeo, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -230,7 +276,9 @@ export class FxSystem {
   tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xffd27a) {
     const t = this.tracers.find((x) => x.life <= 0);
     if (!t) return;
-    const attr = t.line.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const attr = t.line.geometry.getAttribute(
+      "position",
+    ) as THREE.BufferAttribute;
     attr.setXYZ(0, from.x, from.y, from.z);
     attr.setXYZ(1, to.x, to.y, to.z);
     attr.needsUpdate = true;
@@ -266,11 +314,47 @@ export class FxSystem {
     r.life = r.maxLife;
   }
 
-  impact(x: number, y: number, z: number, nx: number, ny: number, nz: number, color = 0xffb347, count = 10) {
+  impact(
+    x: number,
+    y: number,
+    z: number,
+    nx: number,
+    ny: number,
+    nz: number,
+    color = 0xffb347,
+    count = 10,
+  ) {
     this.tmpColor.setHex(color);
-    this.sparks.burst(x, y, z, this.tmpColor, count, 5.5, 0.16, 0.45, 14, 3, 1.4);
-    this.smoke.burst(x, y, z, new THREE.Color(0.7, 0.68, 0.62), 3, 1.4, 0.5, 0.8, -1.5, 1.2, 1.2, 0.35);
-    void nx; void ny; void nz;
+    this.sparks.burst(
+      x,
+      y,
+      z,
+      this.tmpColor,
+      count,
+      5.5,
+      0.16,
+      0.45,
+      14,
+      3,
+      1.4,
+    );
+    this.smoke.burst(
+      x,
+      y,
+      z,
+      new THREE.Color(0.7, 0.68, 0.62),
+      3,
+      1.4,
+      0.5,
+      0.8,
+      -1.5,
+      1.2,
+      1.2,
+      0.35,
+    );
+    void nx;
+    void ny;
+    void nz;
   }
 
   blood(x: number, y: number, z: number) {
@@ -283,7 +367,20 @@ export class FxSystem {
     this.sparks.burst(x, y, z, this.tmpColor, 22, 8, 0.24, 0.6, 10, 2.5);
     this.tmpColor.setHex(0xffdd66);
     this.sparks.burst(x, y, z, this.tmpColor, 12, 5, 0.18, 0.4, 8, 2.5);
-    this.smoke.burst(x, y, z, new THREE.Color(0.55, 0.55, 0.55), 8, 3, 0.7, 1.2, -1, 1.2, 1.6, 0.4);
+    this.smoke.burst(
+      x,
+      y,
+      z,
+      new THREE.Color(0.55, 0.55, 0.55),
+      8,
+      3,
+      0.7,
+      1.2,
+      -1,
+      1.2,
+      1.6,
+      0.4,
+    );
   }
 
   update(dt: number) {
@@ -324,8 +421,18 @@ export class FxSystem {
 
   dispose() {
     this.scene.remove(this.sparks.points, this.smoke.points);
-    for (const t of this.tracers) { this.scene.remove(t.line); t.line.geometry.dispose(); t.mat.dispose(); }
-    for (const f of this.flashes) { this.scene.remove(f.mesh, f.light); (f.mesh.material as THREE.Material).dispose(); }
-    for (const r of this.rings) { this.scene.remove(r.mesh); r.mat.dispose(); }
+    for (const t of this.tracers) {
+      this.scene.remove(t.line);
+      t.line.geometry.dispose();
+      t.mat.dispose();
+    }
+    for (const f of this.flashes) {
+      this.scene.remove(f.mesh, f.light);
+      (f.mesh.material as THREE.Material).dispose();
+    }
+    for (const r of this.rings) {
+      this.scene.remove(r.mesh);
+      r.mat.dispose();
+    }
   }
 }

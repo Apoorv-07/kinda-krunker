@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EngineSettings, GameEngine, GameOverStats, HudSnapshot } from "@/lib/game/engine";
-import { LobbyConfig, WEAPON_ORDER } from "@/lib/game/config";
+import { LobbyConfig, MAP_LABEL, WEAPON_ORDER } from "@/lib/game/config";
 import { MultiplayerClient, getPlayerId } from "@/lib/net/client";
 import type { HostSnapshot, NetBot, NetPlayer } from "@/lib/net/protocol";
 import { sfx } from "@/lib/game/audio";
@@ -107,6 +107,17 @@ export default function GameClient({ config, playerName, onExit, net }: Props) {
     const eng = new GameEngine(canvasRef.current, config, playerName, {
       onHud: (s) => setHud(s),
       onGameOver: handleGameOver,
+      onMatchEnd: (winnerName) => {
+        // Host: publish the result so every guest's client ends its match too.
+        if (hostIsMeRef.current) {
+          void fetch("/api/lobbies", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: config.code, status: "ended" }),
+          }).catch(() => {});
+        }
+        void winnerName;
+      },
     });
     eng.applySettings(settingsRef.current);
     eng.start();
@@ -141,6 +152,11 @@ export default function GameClient({ config, playerName, onExit, net }: Props) {
         setRoster(players);
         setHostId(hId);
         hostIsMeRef.current = hId === pid;
+        client.lastStandings = players.map((p) => ({
+          name: p.name, color: p.color, kills: p.kills, deaths: p.deaths,
+          score: p.score, isPlayer: p.playerId === pid, team: p.team,
+        })).sort((a, b) => b.score - a.score || b.kills - a.kills);
+        engine.setHostRole(hId === pid);
         const sampleP = (id: string) => {
           const it = client.playerInterp.get(id);
           if (!it) return null;
@@ -168,7 +184,28 @@ export default function GameClient({ config, playerName, onExit, net }: Props) {
       },
       onEvents: () => {},
       onStatus: (st, detail) => setNetStatus(st === "error" ? detail ?? "error" : st),
-      onMatchOver: () => {},
+      onMatchOver: () => {
+        // Guest: the host published the result — build the results screen from
+        // the roster so everyone sees the same standings.
+        if (overRef.current) return;
+        const rows = client.lastStandings;
+        const meRow = rows.find((r) => r.isPlayer);
+        setOver({
+          won: rows.length > 0 && rows[0].isPlayer,
+          standings: rows,
+          player: {
+            kills: meRow?.kills ?? 0,
+            deaths: meRow?.deaths ?? 0,
+            score: meRow?.score ?? 0,
+            dmg: 0,
+            acc: 0,
+            bestStreak: 0,
+          },
+          mapLabel: MAP_LABEL[config.map] ?? config.map,
+          lobbyCode: config.code,
+          winnerName: rows[0]?.name ?? "—",
+        });
+      },
     });
 
     // Engine → net wiring
@@ -202,7 +239,11 @@ export default function GameClient({ config, playerName, onExit, net }: Props) {
 
     netRef.current = client;
     void client.join(playerName).then((r) => {
-      if (r.ok) client.start();
+      if (!r.ok) return;
+      // The server decides our team (party = team). Adopt it before any
+      // shooting logic runs, otherwise friendly-fire rules are inverted.
+      if (typeof r.team === "number") engine.setMyTeam(r.team);
+      client.start();
     });
 
     return () => {
@@ -504,6 +545,24 @@ export default function GameClient({ config, playerName, onExit, net }: Props) {
           <Announcement hud={hud} />
           <TopBar hud={hud} />
           <PlayerStats hud={hud} />
+          {net && (
+            <div className="pointer-events-none absolute left-3 top-16 z-20 sm:top-20">
+              <div className="rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2.5 py-1 backdrop-blur-sm">
+                <div className="text-[9px] font-black uppercase tracking-widest text-cyan-200/70">Invite code</div>
+                <div className="font-mono text-sm font-black tracking-[0.2em] text-cyan-300">{config.code}</div>
+              </div>
+              {netStatus === "waiting" && (
+                <div className="mt-1 w-fit rounded-md border border-amber-400/50 bg-amber-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-amber-300">
+                  Waiting for host to start
+                </div>
+              )}
+              {hostId && (
+                <div className="mt-1 w-fit text-[9px] font-bold uppercase tracking-widest text-white/40">
+                  {roster.length} connected · host {hostId === net.playerId ? "you" : roster.find((r) => r.playerId === hostId)?.name ?? "?"}
+                </div>
+              )}
+            </div>
+          )}
           <HealthAmmo hud={hud} />
           <ScopeOverlay hud={hud} />
           <FpsCounter hud={hud} />

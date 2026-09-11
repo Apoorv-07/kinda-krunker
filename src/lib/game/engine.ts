@@ -6,18 +6,44 @@
 
 import * as THREE from "three";
 import {
-  Difficulty, LobbyConfig, MAP_LABEL, MatchState, TUNE, WeaponId, WEAPONS, WEAPON_ORDER,
-  clamp, damp, lerp, mulberry32, pick, randRange, shuffle,
+  Difficulty,
+  LobbyConfig,
+  MAP_LABEL,
+  MatchState,
+  TUNE,
+  WeaponId,
+  WEAPONS,
+  WEAPON_ORDER,
+  clamp,
+  damp,
+  lerp,
+  mulberry32,
+  pick,
+  randRange,
+  shuffle,
 } from "./config";
 import { BoxDef, generateMap, MapData, raycastWorld } from "./maps";
 import { moveBody } from "./physics";
 import { FxSystem } from "./fx";
 import {
-  BotBrain, BotCtx, drawHpBar, makeBotBrain, makeCharacter, CharacterRig, tickBot, updateCharacterAnim,
+  BotBrain,
+  BotCtx,
+  drawHpBar,
+  makeBotBrain,
+  makeCharacter,
+  CharacterRig,
+  tickBot,
+  updateCharacterAnim,
 } from "./bots";
 import { sfx } from "./audio";
 
-export interface EntInput { x: number; z: number; jump: boolean; sprint: boolean; crouch: boolean }
+export interface EntInput {
+  x: number;
+  z: number;
+  jump: boolean;
+  sprint: boolean;
+  crouch: boolean;
+}
 
 export interface Ent {
   id: number;
@@ -62,7 +88,12 @@ export interface Ent {
   team?: number;
 }
 
-export interface FeedItem { id: number; text: string; head: boolean; mine: boolean }
+export interface FeedItem {
+  id: number;
+  text: string;
+  head: boolean;
+  mine: boolean;
+}
 export interface MultiplayerConfig {
   enabled: boolean;
   playerId: string;
@@ -73,34 +104,90 @@ export interface MultiplayerConfig {
 
 export interface RemotePlayersInput {
   players: Array<{
-    playerId: string; name: string; color: number; team: number;
-    hp: number; alive: boolean; weapon: WeaponId; kills: number; deaths: number; score: number;
+    playerId: string;
+    name: string;
+    color: number;
+    team: number;
+    hp: number;
+    alive: boolean;
+    weapon: WeaponId;
+    kills: number;
+    deaths: number;
+    score: number;
   }>;
-  sampleOf: (playerId: string) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
+  sampleOf: (
+    playerId: string,
+  ) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
 }
 
 export interface NetBotsInput {
   bots: Array<{
-    id: number; name: string; color: number; team: number;
-    hp: number; alive: boolean; kills?: number; deaths?: number; score?: number;
+    id: number;
+    name: string;
+    color: number;
+    team: number;
+    hp: number;
+    alive: boolean;
+    kills?: number;
+    deaths?: number;
+    score?: number;
   }>;
-  sampleOf: (id: number) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
+  sampleOf: (
+    id: number,
+  ) => { x: number; y: number; z: number; yaw: number; pitch: number } | null;
 }
 
 const BOT_NAMES = (): string[] => [
-  "xX_Reaper_Xx", "NoScopeNina", "BlitzKrieg", "PixelPunisher", "TurboTommy",
-  "ShadowSniper", "Blastoise99", "CrateCrawler", "HeadshotHarry", "LagginLarry",
-  "NeonNemesis", "BoomBoomBetty", "QuickScopeQuin", "FragFred", "SneakySnek",
-  "BulletBill", "DoomDaisy", "VandalVince", "GhostGerry", "MayhemMia",
+  "xX_Reaper_Xx",
+  "NoScopeNina",
+  "BlitzKrieg",
+  "PixelPunisher",
+  "TurboTommy",
+  "ShadowSniper",
+  "Blastoise99",
+  "CrateCrawler",
+  "HeadshotHarry",
+  "LagginLarry",
+  "NeonNemesis",
+  "BoomBoomBetty",
+  "QuickScopeQuin",
+  "FragFred",
+  "SneakySnek",
+  "BulletBill",
+  "DoomDaisy",
+  "VandalVince",
+  "GhostGerry",
+  "MayhemMia",
 ];
 
-export interface Standing { name: string; color: number; kills: number; deaths: number; score: number; isPlayer: boolean; team?: number }
+export interface Standing {
+  name: string;
+  color: number;
+  kills: number;
+  deaths: number;
+  score: number;
+  isPlayer: boolean;
+  team?: number;
+}
 
 /** Damage another client claims to have landed on one of my bots. */
-export interface NetEventIn { seq: number; kind: string; to?: string; from?: string; fromName?: string; dmg?: number; head?: boolean; text?: string }
+export interface NetEventIn {
+  seq: number;
+  kind: string;
+  to?: string;
+  from?: string;
+  fromName?: string;
+  dmg?: number;
+  head?: boolean;
+  text?: string;
+}
 
 /** Damage a guest claims to have dealt to one of the host's bots. */
-export interface BotHitIn { botId: number; dmg: number; head: boolean }
+export interface BotHitIn {
+  botId: number;
+  dmg: number;
+  head: boolean;
+}
 
 export interface HudSnapshot {
   state: MatchState;
@@ -139,7 +226,14 @@ export interface HudSnapshot {
 export interface GameOverStats {
   won: boolean;
   standings: Standing[];
-  player: { kills: number; deaths: number; score: number; dmg: number; acc: number; bestStreak: number };
+  player: {
+    kills: number;
+    deaths: number;
+    score: number;
+    dmg: number;
+    acc: number;
+    bestStreak: number;
+  };
   mapLabel: string;
   lobbyCode: string;
   winnerName: string;
@@ -148,16 +242,31 @@ export interface GameOverStats {
 export interface EngineCallbacks {
   onHud: (snap: HudSnapshot) => void;
   onGameOver: (stats: GameOverStats) => void;
+  /** fired when this client's match reaches its end condition */
+  onMatchEnd?: (winnerName: string) => void;
 }
 
-export interface EngineSettings { sens: number; fov: number; volume: number; autoFire: boolean }
+export interface EngineSettings {
+  sens: number;
+  fov: number;
+  volume: number;
+  autoFire: boolean;
+}
 
 const WEAPON_COLORS: Record<WeaponId, number> = {
-  ar: 0xffb800, smg: 0x22d3ee, shotgun: 0xf97316, sniper: 0xa855f7,
+  ar: 0xffb800,
+  smg: 0x22d3ee,
+  shotgun: 0xf97316,
+  sniper: 0xa855f7,
 };
 
 const BOT_WEAPONS: WeaponId[] = ["ar", "ar", "ar", "smg", "shotgun", "sniper"];
-const BOT_DMG: Record<WeaponId, number> = { ar: 12, smg: 9, shotgun: 7, sniper: 60 };
+const BOT_DMG: Record<WeaponId, number> = {
+  ar: 12,
+  smg: 9,
+  shotgun: 7,
+  sniper: 60,
+};
 
 let ENT_SEQ = 1;
 
@@ -172,8 +281,17 @@ export class GameEngine {
   private colliders: BoxDef[] = [];
   private worldGroup: THREE.Group | null = null;
   private padMeshes: THREE.Mesh[] = [];
-  private weaponPadMeshes: { group: THREE.Group; taken: boolean; respawnT: number; weapon: WeaponId; floatBox: THREE.Mesh }[] = [];
-  private vms = new Map<WeaponId, { group: THREE.Group; muzzle: THREE.Object3D }>();
+  private weaponPadMeshes: {
+    group: THREE.Group;
+    taken: boolean;
+    respawnT: number;
+    weapon: WeaponId;
+    floatBox: THREE.Mesh;
+  }[] = [];
+  private vms = new Map<
+    WeaponId,
+    { group: THREE.Group; muzzle: THREE.Object3D }
+  >();
   private sun!: THREE.DirectionalLight;
 
   // state
@@ -197,9 +315,12 @@ export class GameEngine {
 
   // input (mutated by React layer)
   input = {
-    moveX: 0, moveZ: 0,
-    lookDX: 0, lookDY: 0,
-    fire: false, firePressed: false,
+    moveX: 0,
+    moveZ: 0,
+    lookDX: 0,
+    lookDY: 0,
+    fire: false,
+    firePressed: false,
     ads: false,
     jumpPressed: false,
     crouchPressed: false,
@@ -209,7 +330,12 @@ export class GameEngine {
     switchWeapon: -1,
   };
   private prevFire = false;
-  private settings: EngineSettings = { sens: 1, fov: 92, volume: 0.7, autoFire: false };
+  private settings: EngineSettings = {
+    sens: 1,
+    fov: 92,
+    volume: 0.7,
+    autoFire: false,
+  };
 
   // camera fx
   private baseFov = 92;
@@ -241,18 +367,32 @@ export class GameEngine {
   private hudTick = 0;
   private fpsEma = 60;
 
-  constructor(canvas: HTMLCanvasElement, config: LobbyConfig, playerName: string, cb: EngineCallbacks) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    config: LobbyConfig,
+    playerName: string,
+    cb: EngineCallbacks,
+  ) {
     this.canvas = canvas;
     this.config = config;
     this.playerName = playerName;
     this.cb = cb;
     this.rng = mulberry32(config.seed + 7);
     this.timeLeft = config.timeLimit;
-    this.isMobile = typeof window !== "undefined" && (window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768);
+    this.isMobile =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(pointer: coarse)").matches ||
+        window.innerWidth < 768);
 
     // renderer
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.isMobile, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.isMobile ? 1.6 : 2));
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: !this.isMobile,
+      powerPreference: "high-performance",
+    });
+    this.renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio, this.isMobile ? 1.6 : 2),
+    );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -276,7 +416,7 @@ export class GameEngine {
     this.player = this.makePlayer();
     this.spawnEntity(this.player, true);
     // bots
-    const names = shuffle(this.rng, (BOT_NAMES()));
+    const names = shuffle(this.rng, BOT_NAMES());
     for (let i = 0; i < config.botCount; i++) {
       const bot = this.makeBot(names[i % names.length], i);
       this.bots.push(bot);
@@ -300,7 +440,10 @@ export class GameEngine {
     const getGeo = (w: number, h: number, d: number) => {
       const k = `${w}|${h}|${d}`;
       let g = geoCache.get(k);
-      if (!g) { g = new THREE.BoxGeometry(w, h, d); geoCache.set(k, g); }
+      if (!g) {
+        g = new THREE.BoxGeometry(w, h, d);
+        geoCache.set(k, g);
+      }
       return g;
     };
     const getMat = (c: number, glow?: number, glowI?: number) => {
@@ -308,8 +451,11 @@ export class GameEngine {
       let m = matCache.get(key);
       if (!m) {
         m = new THREE.MeshStandardMaterial({
-          color: c, roughness: 0.75, metalness: 0.08,
-          emissive: glow ? glow : 0x000000, emissiveIntensity: glow ? glowI ?? 1.2 : 0,
+          color: c,
+          roughness: 0.75,
+          metalness: 0.08,
+          emissive: glow ? glow : 0x000000,
+          emissiveIntensity: glow ? (glowI ?? 1.2) : 0,
         });
         matCache.set(key, m);
       }
@@ -317,7 +463,10 @@ export class GameEngine {
     };
 
     for (const b of this.map.boxes) {
-      const mesh = new THREE.Mesh(getGeo(b.w, b.h, b.d), getMat(b.color, b.glow, b.glowI));
+      const mesh = new THREE.Mesh(
+        getGeo(b.w, b.h, b.d),
+        getMat(b.color, b.glow, b.glowI),
+      );
       mesh.position.set(b.x, b.y, b.z);
       mesh.castShadow = b.collide && b.h > 0.3 && b.w < 40;
       mesh.receiveShadow = b.collide;
@@ -326,9 +475,15 @@ export class GameEngine {
     }
 
     // ground grid
-    const grid = new THREE.GridHelper(this.map.size * 2, this.map.size * 2, 0x000000, 0x000000);
+    const grid = new THREE.GridHelper(
+      this.map.size * 2,
+      this.map.size * 2,
+      0x000000,
+      0x000000,
+    );
     (grid.material as THREE.Material).transparent = true;
-    (grid.material as THREE.Material).opacity = this.map.theme === "neon" ? 0.25 : 0.12;
+    (grid.material as THREE.Material).opacity =
+      this.map.theme === "neon" ? 0.25 : 0.12;
     grid.position.y = 0.02;
     (grid.material as THREE.Material).colorWrite = true;
     this.worldGroup.add(grid);
@@ -337,13 +492,22 @@ export class GameEngine {
     for (const p of this.map.pads) {
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(0.85, 1.0, 0.14, 24),
-        new THREE.MeshStandardMaterial({ color: 0x10131f, roughness: 0.4, metalness: 0.3 }),
+        new THREE.MeshStandardMaterial({
+          color: 0x10131f,
+          roughness: 0.4,
+          metalness: 0.3,
+        }),
       );
       base.position.set(p.x, 0.07, p.z);
       this.worldGroup.add(base);
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(0.7, 0.07, 8, 24),
-        new THREE.MeshStandardMaterial({ color: t.accent, emissive: t.accent, emissiveIntensity: 1.8, roughness: 0.4 }),
+        new THREE.MeshStandardMaterial({
+          color: t.accent,
+          emissive: t.accent,
+          emissiveIntensity: 1.8,
+          roughness: 0.4,
+        }),
       );
       ring.rotation.x = Math.PI / 2;
       ring.position.set(p.x, 0.16, p.z);
@@ -352,38 +516,67 @@ export class GameEngine {
     }
 
     // weapon pads
-    const wpTypes: WeaponId[] = ["smg", "shotgun", "sniper", "ar", "smg", "shotgun"];
+    const wpTypes: WeaponId[] = [
+      "smg",
+      "shotgun",
+      "sniper",
+      "ar",
+      "smg",
+      "shotgun",
+    ];
     this.map.weaponPads.forEach((p, i) => {
       const g = new THREE.Group();
       const disc = new THREE.Mesh(
         new THREE.CylinderGeometry(0.75, 0.9, 0.1, 20),
-        new THREE.MeshStandardMaterial({ color: 0x10131f, roughness: 0.4, metalness: 0.3 }),
+        new THREE.MeshStandardMaterial({
+          color: 0x10131f,
+          roughness: 0.4,
+          metalness: 0.3,
+        }),
       );
       disc.position.y = 0.05;
       g.add(disc);
       const weapon = wpTypes[i % wpTypes.length];
       const floatBox = new THREE.Mesh(
         new THREE.BoxGeometry(0.34, 0.2, 0.9),
-        new THREE.MeshStandardMaterial({ color: WEAPON_COLORS[weapon], emissive: WEAPON_COLORS[weapon], emissiveIntensity: 0.35, roughness: 0.4 }),
+        new THREE.MeshStandardMaterial({
+          color: WEAPON_COLORS[weapon],
+          emissive: WEAPON_COLORS[weapon],
+          emissiveIntensity: 0.35,
+          roughness: 0.4,
+        }),
       );
       floatBox.position.y = 0.85;
       g.add(floatBox);
       g.position.set(p.x, 0, p.z);
       this.worldGroup!.add(g);
-      this.weaponPadMeshes.push({ group: g, taken: false, respawnT: 0, weapon, floatBox });
+      this.weaponPadMeshes.push({
+        group: g,
+        taken: false,
+        respawnT: 0,
+        weapon,
+        floatBox,
+      });
     });
   }
 
   private buildLights() {
     const t = this.map.themeData;
-    const hemi = new THREE.HemisphereLight(t.hemiSky, t.hemiGround, t.hemiIntensity);
+    const hemi = new THREE.HemisphereLight(
+      t.hemiSky,
+      t.hemiGround,
+      t.hemiIntensity,
+    );
     this.scene.add(hemi);
     const amb = new THREE.AmbientLight(0xffffff, t.ambient);
     this.scene.add(amb);
     const sun = new THREE.DirectionalLight(t.sunColor, t.sunIntensity);
     sun.position.set(28, 42, 18);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(this.isMobile ? 1024 : 2048, this.isMobile ? 1024 : 2048);
+    sun.shadow.mapSize.set(
+      this.isMobile ? 1024 : 2048,
+      this.isMobile ? 1024 : 2048,
+    );
     sun.shadow.camera.left = -38;
     sun.shadow.camera.right = 38;
     sun.shadow.camera.top = 38;
@@ -406,31 +599,80 @@ export class GameEngine {
 
   private makePlayer(): Ent {
     return {
-      id: 0, name: this.playerName, isBot: false, color: 0x3ddc84,
-      pos: new THREE.Vector3(), vel: new THREE.Vector3(),
-      yaw: 0, pitch: 0, onGround: false, crouch: false,
-      slideT: 0, slideDir: new THREE.Vector3(),
-      hp: TUNE.maxHp, alive: true, weapon: "ar", ammo: this.freshAmmo(),
-      fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
-      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      id: 0,
+      name: this.playerName,
+      isBot: false,
+      color: 0x3ddc84,
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      yaw: 0,
+      pitch: 0,
+      onGround: false,
+      crouch: false,
+      slideT: 0,
+      slideDir: new THREE.Vector3(),
+      hp: TUNE.maxHp,
+      alive: true,
+      weapon: "ar",
+      ammo: this.freshAmmo(),
+      fireCd: 0,
+      reloadT: 0,
+      kills: 0,
+      deaths: 0,
+      score: 0,
+      streak: 0,
+      lastDamageT: -10,
+      deadT: 0,
+      spawnProtectT: 0,
+      padCd: 0,
       input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
-      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+      ads: false,
+      shots: 0,
+      hits: 0,
+      dmgDealt: 0,
+      bestStreak: 0,
     };
   }
 
   private makeBot(name: string, idx: number): Ent {
-    const colors = [0xef4444, 0x3b82f6, 0xeab308, 0xa855f7, 0xec4899, 0x06b6d4, 0xf97316, 0x84cc16, 0x14b8a6];
+    const colors = [
+      0xef4444, 0x3b82f6, 0xeab308, 0xa855f7, 0xec4899, 0x06b6d4, 0xf97316,
+      0x84cc16, 0x14b8a6,
+    ];
     const color = colors[idx % colors.length];
     const e: Ent = {
-      id: ENT_SEQ++, name, isBot: true, color,
-      pos: new THREE.Vector3(), vel: new THREE.Vector3(),
-      yaw: 0, pitch: 0, onGround: false, crouch: false,
-      slideT: 0, slideDir: new THREE.Vector3(),
-      hp: TUNE.maxHp, alive: true, weapon: pick(this.rng, BOT_WEAPONS), ammo: this.freshAmmo(),
-      fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
-      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      id: ENT_SEQ++,
+      name,
+      isBot: true,
+      color,
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      yaw: 0,
+      pitch: 0,
+      onGround: false,
+      crouch: false,
+      slideT: 0,
+      slideDir: new THREE.Vector3(),
+      hp: TUNE.maxHp,
+      alive: true,
+      weapon: pick(this.rng, BOT_WEAPONS),
+      ammo: this.freshAmmo(),
+      fireCd: 0,
+      reloadT: 0,
+      kills: 0,
+      deaths: 0,
+      score: 0,
+      streak: 0,
+      lastDamageT: -10,
+      deadT: 0,
+      spawnProtectT: 0,
+      padCd: 0,
       input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
-      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+      ads: false,
+      shots: 0,
+      hits: 0,
+      dmgDealt: 0,
+      bestStreak: 0,
       brain: makeBotBrain(this.rng),
     };
     e.rig = makeCharacter(name, color);
@@ -471,60 +713,125 @@ export class GameEngine {
     for (const id of WEAPON_ORDER) {
       const group = new THREE.Group();
       const accent = WEAPON_COLORS[id];
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f2a, roughness: 0.45, metalness: 0.5 });
-      const accentMat = new THREE.MeshStandardMaterial({ color: accent, roughness: 0.4, metalness: 0.3, emissive: accent, emissiveIntensity: 0.25 });
-      const handMat = new THREE.MeshStandardMaterial({ color: 0xffc999, roughness: 0.8 });
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0x1c1f2a,
+        roughness: 0.45,
+        metalness: 0.5,
+      });
+      const accentMat = new THREE.MeshStandardMaterial({
+        color: accent,
+        roughness: 0.4,
+        metalness: 0.3,
+        emissive: accent,
+        emissiveIntensity: 0.25,
+      });
+      const handMat = new THREE.MeshStandardMaterial({
+        color: 0xffc999,
+        roughness: 0.8,
+      });
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.42), bodyMat);
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.07, 0.09, 0.42),
+        bodyMat,
+      );
       group.add(body);
-      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.1), handMat);
+      const hand = new THREE.Mesh(
+        new THREE.BoxGeometry(0.09, 0.1, 0.1),
+        handMat,
+      );
       hand.position.set(0, -0.02, 0.1);
       group.add(hand);
-      const foregrip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.1), handMat);
+      const foregrip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.12, 0.1),
+        handMat,
+      );
       foregrip.position.set(0, -0.06, -0.14);
       group.add(foregrip);
 
       if (id === "ar" || id === "smg") {
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, id === "ar" ? 0.34 : 0.22), bodyMat);
+        const barrel = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.04, id === "ar" ? 0.34 : 0.22),
+          bodyMat,
+        );
         barrel.position.set(0, 0.02, id === "ar" ? -0.36 : -0.3);
         group.add(barrel);
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.18, 0.09), accentMat);
+        const mag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.055, 0.18, 0.09),
+          accentMat,
+        );
         mag.position.set(0, -0.13, 0.02);
         mag.rotation.x = 0.35;
         group.add(mag);
-        const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.1), accentMat);
+        const sight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.03, 0.05, 0.1),
+          accentMat,
+        );
         sight.position.set(0, 0.07, -0.02);
         group.add(sight);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.14), bodyMat);
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.08, 0.14),
+          bodyMat,
+        );
         stock.position.set(0, -0.01, 0.26);
         group.add(stock);
       } else if (id === "shotgun") {
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.44), accentMat);
+        const barrel = new THREE.Mesh(
+          new THREE.BoxGeometry(0.075, 0.075, 0.44),
+          accentMat,
+        );
         barrel.position.set(0, 0.02, -0.4);
         group.add(barrel);
-        const pump = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.16), bodyMat);
+        const pump = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.06, 0.16),
+          bodyMat,
+        );
         pump.position.set(0, -0.07, -0.2);
         group.add(pump);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.16), bodyMat);
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.1, 0.16),
+          bodyMat,
+        );
         stock.position.set(0, -0.02, 0.26);
         group.add(stock);
       } else {
-        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.6), accentMat);
+        const barrel = new THREE.Mesh(
+          new THREE.BoxGeometry(0.045, 0.045, 0.6),
+          accentMat,
+        );
         barrel.position.set(0, 0.02, -0.5);
         group.add(barrel);
-        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.2, 12), bodyMat);
+        const scope = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.045, 0.2, 12),
+          bodyMat,
+        );
         scope.rotation.x = Math.PI / 2;
         scope.position.set(0, 0.09, -0.05);
         group.add(scope);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.18), bodyMat);
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.11, 0.18),
+          bodyMat,
+        );
         stock.position.set(0, -0.02, 0.28);
         group.add(stock);
-        const bolt = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.08), accentMat);
+        const bolt = new THREE.Mesh(
+          new THREE.BoxGeometry(0.03, 0.05, 0.08),
+          accentMat,
+        );
         bolt.position.set(0.05, -0.02, 0.02);
         group.add(bolt);
       }
       const muzzle = new THREE.Object3D();
-      muzzle.position.set(0, 0.02, id === "sniper" ? -0.82 : id === "shotgun" ? -0.62 : id === "ar" ? -0.55 : -0.42);
+      muzzle.position.set(
+        0,
+        0.02,
+        id === "sniper"
+          ? -0.82
+          : id === "shotgun"
+            ? -0.62
+            : id === "ar"
+              ? -0.55
+              : -0.42,
+      );
       group.add(muzzle);
       group.position.set(0.3, -0.27, -0.5);
       group.visible = false;
@@ -560,7 +867,8 @@ export class GameEngine {
     this.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.geometry) mesh.geometry.dispose();
-      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      const mat = mesh.material as
+        THREE.Material | THREE.Material[] | undefined;
       if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
       else if (mat) mat.dispose();
     });
@@ -601,12 +909,19 @@ export class GameEngine {
   }
 
   restart() {
-    this.player.kills = 0; this.player.deaths = 0; this.player.score = 0;
-    this.player.shots = 0; this.player.hits = 0; this.player.dmgDealt = 0;
+    this.player.kills = 0;
+    this.player.deaths = 0;
+    this.player.score = 0;
+    this.player.shots = 0;
+    this.player.hits = 0;
+    this.player.dmgDealt = 0;
     this.player.bestStreak = 0;
     this.player.streak = 0;
     for (const b of this.bots) {
-      b.kills = 0; b.deaths = 0; b.score = 0; b.streak = 0;
+      b.kills = 0;
+      b.deaths = 0;
+      b.score = 0;
+      b.streak = 0;
     }
     this.feed = [];
     this.announceText = "";
@@ -619,7 +934,10 @@ export class GameEngine {
     this.spawnEntity(this.player, true);
     this.player.spawnProtectT = 1.2;
     for (const b of this.bots) this.spawnEntity(b, true);
-    for (const wp of this.weaponPadMeshes) { wp.taken = false; wp.group.visible = true; }
+    for (const wp of this.weaponPadMeshes) {
+      wp.taken = false;
+      wp.group.visible = true;
+    }
     this.markHud();
   }
 
@@ -631,15 +949,22 @@ export class GameEngine {
     const standings = this.standings();
     const winner = standings[0];
     const won = winner.isPlayer;
-    if (won) sfx.play("win"); else sfx.play("lose");
+    if (won) sfx.play("win");
+    else sfx.play("lose");
     this.markHud();
+    this.cb.onMatchEnd?.(winner.name);
     this.cb.onGameOver({
       won,
       standings,
       player: {
-        kills: this.player.kills, deaths: this.player.deaths, score: this.player.score,
+        kills: this.player.kills,
+        deaths: this.player.deaths,
+        score: this.player.score,
         dmg: this.player.dmgDealt,
-        acc: this.player.shots > 0 ? Math.round((this.player.hits / this.player.shots) * 100) : 0,
+        acc:
+          this.player.shots > 0
+            ? Math.round((this.player.hits / this.player.shots) * 100)
+            : 0,
         bestStreak: this.player.bestStreak,
       },
       mapLabel: MAP_LABEL[this.config.map],
@@ -652,8 +977,17 @@ export class GameEngine {
     if (this.mpEnabled) return this.netStandings();
     const all: Ent[] = [this.player, ...this.bots];
     return all
-      .map((e) => ({ name: e.name, color: e.color, kills: e.kills, deaths: e.deaths, score: e.score, isPlayer: !e.isBot }))
-      .sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
+      .map((e) => ({
+        name: e.name,
+        color: e.color,
+        kills: e.kills,
+        deaths: e.deaths,
+        score: e.score,
+        isPlayer: !e.isBot,
+      }))
+      .sort(
+        (a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths,
+      );
   }
 
   // ---------------------------------------------------------------- combat
@@ -683,7 +1017,8 @@ export class GameEngine {
     if (target === this.player) {
       this.dmgKey++;
       this.dmgAmp = clamp(amount / 24, 0.25, 1);
-      const dx = attacker.pos.x - target.pos.x, dz = attacker.pos.z - target.pos.z;
+      const dx = attacker.pos.x - target.pos.x,
+        dz = attacker.pos.z - target.pos.z;
       let rel = Math.atan2(dx, dz) - target.yaw;
       while (rel > Math.PI) rel -= Math.PI * 2;
       while (rel < -Math.PI) rel += Math.PI * 2;
@@ -711,7 +1046,11 @@ export class GameEngine {
       target.rig.fallT = 0.0001;
       target.rig.hpSprite.visible = false;
     }
-    this.addFeed(`${attacker.name} ${head ? "✖" : "›"} ${target.name}`, head, attacker === this.player || target === this.player);
+    this.addFeed(
+      `${attacker.name} ${head ? "✖" : "›"} ${target.name}`,
+      head,
+      attacker === this.player || target === this.player,
+    );
     this.fx.explosion(target.pos.x, target.pos.y + 1.0, target.pos.z);
     this.addShake(attacker === this.player ? 0.15 : 0.25);
 
@@ -724,8 +1063,19 @@ export class GameEngine {
       this.hitKind = 3;
       this.hitKey++;
       if (this.player.streak >= 2) {
-        const labels = ["", "", "DOUBLE KILL", "TRIPLE KILL", "RAMPAGE", "UNSTOPPABLE", "GODLIKE"];
-        this.announce(labels[Math.min(this.player.streak, 6)] ?? "GODLIKE", `Streak ${this.player.streak}`);
+        const labels = [
+          "",
+          "",
+          "DOUBLE KILL",
+          "TRIPLE KILL",
+          "RAMPAGE",
+          "UNSTOPPABLE",
+          "GODLIKE",
+        ];
+        this.announce(
+          labels[Math.min(this.player.streak, 6)] ?? "GODLIKE",
+          `Streak ${this.player.streak}`,
+        );
       } else if (head) {
         this.announce("HEADSHOT", "+" + (100 + (this.player.streak - 1) * 25));
       }
@@ -739,38 +1089,74 @@ export class GameEngine {
       target.streak = 0;
     }
 
-    if (this.config.scoreLimit > 0 && attacker.kills >= this.config.scoreLimit) {
+    if (
+      this.config.scoreLimit > 0 &&
+      attacker.kills >= this.config.scoreLimit
+    ) {
       this.endMatch();
     }
     this.markHud();
   }
 
-  private raycastEnt(e: Ent, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): { t: number; head: boolean } | null {
+  private raycastEnt(
+    e: Ent,
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): { t: number; head: boolean } | null {
     const r = TUNE.radius + 0.05;
     const h = TUNE.standHeight;
-    const minX = e.pos.x - r, maxX = e.pos.x + r;
-    const minY = e.pos.y, maxY = e.pos.y + h;
-    const minZ = e.pos.z - r, maxZ = e.pos.z + r;
-    let tmin = 0, tmax = Infinity;
-    if (Math.abs(dx) < 1e-9) { if (ox < minX || ox > maxX) return null; }
-    else {
-      let t1 = (minX - ox) / dx, t2 = (maxX - ox) / dx;
-      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    const minX = e.pos.x - r,
+      maxX = e.pos.x + r;
+    const minY = e.pos.y,
+      maxY = e.pos.y + h;
+    const minZ = e.pos.z - r,
+      maxZ = e.pos.z + r;
+    let tmin = 0,
+      tmax = Infinity;
+    if (Math.abs(dx) < 1e-9) {
+      if (ox < minX || ox > maxX) return null;
+    } else {
+      let t1 = (minX - ox) / dx,
+        t2 = (maxX - ox) / dx;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
       if (tmin > tmax) return null;
     }
-    if (Math.abs(dy) < 1e-9) { if (oy < minY || oy > maxY) return null; }
-    else {
-      let t1 = (minY - oy) / dy, t2 = (maxY - oy) / dy;
-      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    if (Math.abs(dy) < 1e-9) {
+      if (oy < minY || oy > maxY) return null;
+    } else {
+      let t1 = (minY - oy) / dy,
+        t2 = (maxY - oy) / dy;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
       if (tmin > tmax) return null;
     }
-    if (Math.abs(dz) < 1e-9) { if (oz < minZ || oz > maxZ) return null; }
-    else {
-      let t1 = (minZ - oz) / dz, t2 = (maxZ - oz) / dz;
-      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+    if (Math.abs(dz) < 1e-9) {
+      if (oz < minZ || oz > maxZ) return null;
+    } else {
+      let t1 = (minZ - oz) / dz,
+        t2 = (maxZ - oz) / dz;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
       if (tmin > tmax) return null;
     }
     const hitY = oy + dy * tmin;
@@ -790,10 +1176,19 @@ export class GameEngine {
     a.mag--;
     p.fireCd = 60 / w.rpm;
     p.shots += w.pellets;
-    this.recoilPitch += w.id === "sniper" ? 0.06 : w.id === "shotgun" ? 0.05 : 0.022;
+    this.recoilPitch +=
+      w.id === "sniper" ? 0.06 : w.id === "shotgun" ? 0.05 : 0.022;
     this.recoilRoll += (Math.random() - 0.5) * 0.02;
     this.addShake(w.id === "sniper" ? 0.4 : w.id === "shotgun" ? 0.35 : 0.1);
-    sfx.play(w.id === "ar" ? "shoot_ar" : w.id === "smg" ? "shoot_smg" : w.id === "shotgun" ? "shoot_shotgun" : "shoot_sniper");
+    sfx.play(
+      w.id === "ar"
+        ? "shoot_ar"
+        : w.id === "smg"
+          ? "shoot_smg"
+          : w.id === "shotgun"
+            ? "shoot_shotgun"
+            : "shoot_sniper",
+    );
 
     // muzzle flash
     const vm = this.vms.get(p.weapon)!;
@@ -801,7 +1196,10 @@ export class GameEngine {
     vm.muzzle.getWorldPosition(this.tmpV);
     this.fx.muzzle(this.tmpV, 0xffbb55);
 
-    const spreadBase = (w.spread + (this.horizSpeed(p) > 2 ? w.moveSpread : 0)) * (this.input.ads ? 0.45 : 1) * (p.slideT > 0 ? 2.2 : 1);
+    const spreadBase =
+      (w.spread + (this.horizSpeed(p) > 2 ? w.moveSpread : 0)) *
+      (this.input.ads ? 0.45 : 1) *
+      (p.slideT > 0 ? 2.2 : 1);
     const eye = this.tmpV2.set(p.pos.x, p.pos.y + TUNE.eyeHeight, p.pos.z);
 
     for (let i = 0; i < w.pellets; i++) {
@@ -819,10 +1217,31 @@ export class GameEngine {
       for (const b of this.netTargets()) {
         if (!b.alive || b.spawnProtectT > 0) continue;
         if (!this.canHurt(p, b)) continue;
-        const hit = this.raycastEnt(b, eye.x, eye.y, eye.z, dir.x, dir.y, dir.z);
-        if (hit && hit.t < bestEntT) { bestEntT = hit.t; bestEnt = b; bestHead = hit.head; }
+        const hit = this.raycastEnt(
+          b,
+          eye.x,
+          eye.y,
+          eye.z,
+          dir.x,
+          dir.y,
+          dir.z,
+        );
+        if (hit && hit.t < bestEntT) {
+          bestEntT = hit.t;
+          bestEnt = b;
+          bestHead = hit.head;
+        }
       }
-      const worldT = raycastWorld(this.colliders, eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, w.range);
+      const worldT = raycastWorld(
+        this.colliders,
+        eye.x,
+        eye.y,
+        eye.z,
+        dir.x,
+        dir.y,
+        dir.z,
+        w.range,
+      );
 
       const muzzle = this.tmpV;
       let endDist: number;
@@ -830,11 +1249,14 @@ export class GameEngine {
         endDist = bestEntT;
         const dmg = Math.round(w.dmg * (bestHead ? w.headMul : 1));
         p.hits++;
-        const hx = eye.x + dir.x * bestEntT, hy = eye.y + dir.y * bestEntT, hz = eye.z + dir.z * bestEntT;
+        const hx = eye.x + dir.x * bestEntT,
+          hy = eye.y + dir.y * bestEntT,
+          hz = eye.z + dir.z * bestEntT;
         this.fx.blood(hx, hy, hz);
         // Networked humans are authoritative over their own health, so report
         // the hit instead of applying it. Host-simulated bots stay local.
-        const netControlled = bestEnt.remote || (!this.mpIsHost && bestEnt.isBot);
+        const netControlled =
+          bestEnt.remote || (!this.mpIsHost && bestEnt.isBot);
         if (netControlled) {
           if (bestEnt.remote && bestEnt.netId && this.onReportHit) {
             this.onReportHit(bestEnt.netId, dmg, bestHead);
@@ -857,10 +1279,16 @@ export class GameEngine {
         }
       } else {
         endDist = worldT;
-        const hx = eye.x + dir.x * worldT, hy = eye.y + dir.y * worldT, hz = eye.z + dir.z * worldT;
+        const hx = eye.x + dir.x * worldT,
+          hy = eye.y + dir.y * worldT,
+          hz = eye.z + dir.z * worldT;
         this.fx.impact(hx, hy, hz, dir.x, dir.y, dir.z, 0xffb347, 7);
       }
-      const end = this.tmpV3.set(eye.x + dir.x * endDist, eye.y + dir.y * endDist, eye.z + dir.z * endDist);
+      const end = this.tmpV3.set(
+        eye.x + dir.x * endDist,
+        eye.y + dir.y * endDist,
+        eye.z + dir.z * endDist,
+      );
       this.fx.tracer(muzzle, end, 0xffd27a);
     }
     if (a.mag <= 0) this.startReload();
@@ -880,24 +1308,59 @@ export class GameEngine {
     dir.z += (Math.random() - 0.5) * spread * 2.4;
     dir.normalize();
 
-    const entHit = this.raycastEnt(target, bot.pos.x, eyeY, bot.pos.z, dir.x, dir.y, dir.z);
-    const worldT = raycastWorld(this.colliders, bot.pos.x, eyeY, bot.pos.z, dir.x, dir.y, dir.z, 60);
+    const entHit = this.raycastEnt(
+      target,
+      bot.pos.x,
+      eyeY,
+      bot.pos.z,
+      dir.x,
+      dir.y,
+      dir.z,
+    );
+    const worldT = raycastWorld(
+      this.colliders,
+      bot.pos.x,
+      eyeY,
+      bot.pos.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      60,
+    );
 
-    const muzzle = this.tmpV.set(bot.pos.x + dir.x * 0.7, eyeY + dir.y * 0.7 - 0.08, bot.pos.z + dir.z * 0.7);
+    const muzzle = this.tmpV.set(
+      bot.pos.x + dir.x * 0.7,
+      eyeY + dir.y * 0.7 - 0.08,
+      bot.pos.z + dir.z * 0.7,
+    );
     let endDist = worldT;
     if (entHit && entHit.t < worldT) {
       endDist = entHit.t;
-      const dmg = Math.round(BOT_DMG[bot.weapon] * dmgMul * (entHit.head ? 1.8 : 1));
+      const dmg = Math.round(
+        BOT_DMG[bot.weapon] * dmgMul * (entHit.head ? 1.8 : 1),
+      );
       this.damage(target, dmg, bot, entHit.head);
-      const hx = bot.pos.x + dir.x * entHit.t, hy = eyeY + dir.y * entHit.t, hz = bot.pos.z + dir.z * entHit.t;
+      const hx = bot.pos.x + dir.x * entHit.t,
+        hy = eyeY + dir.y * entHit.t,
+        hz = bot.pos.z + dir.z * entHit.t;
       this.fx.blood(hx, hy, hz);
     } else {
       this.fx.impact(
-        bot.pos.x + dir.x * worldT, eyeY + dir.y * worldT, bot.pos.z + dir.z * worldT,
-        dir.x, dir.y, dir.z, 0xffa040, 5,
+        bot.pos.x + dir.x * worldT,
+        eyeY + dir.y * worldT,
+        bot.pos.z + dir.z * worldT,
+        dir.x,
+        dir.y,
+        dir.z,
+        0xffa040,
+        5,
       );
     }
-    const end = this.tmpV3.set(bot.pos.x + dir.x * endDist, eyeY + dir.y * endDist, bot.pos.z + dir.z * endDist);
+    const end = this.tmpV3.set(
+      bot.pos.x + dir.x * endDist,
+      eyeY + dir.y * endDist,
+      bot.pos.z + dir.z * endDist,
+    );
     this.fx.tracer(muzzle, end, 0xff5566);
     this.fx.muzzle(muzzle, 0xff7766);
     sfx.play("shoot_ar", true);
@@ -940,16 +1403,27 @@ export class GameEngine {
     if (!p.alive) return;
     p.crouch = this.input.crouchHeld || p.slideT > 0;
     // slide trigger
-    if (this.input.crouchHeld && this.input.sprintHeld && p.onGround && p.slideT <= 0 && this.horizSpeed(p) > 5) {
+    if (
+      this.input.crouchHeld &&
+      this.input.sprintHeld &&
+      p.onGround &&
+      p.slideT <= 0 &&
+      this.horizSpeed(p) > 5
+    ) {
       p.slideT = TUNE.slideTime;
       p.slideDir.set(p.vel.x, 0, p.vel.z).normalize();
       sfx.play("slide");
     }
     const w = WEAPONS[p.weapon];
-    const speed = p.crouch ? TUNE.crouchSpeed : this.input.sprintHeld ? TUNE.sprintSpeed : TUNE.walkSpeed;
+    const speed = p.crouch
+      ? TUNE.crouchSpeed
+      : this.input.sprintHeld
+        ? TUNE.sprintSpeed
+        : TUNE.walkSpeed;
     const f = this.tmpV.set(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
     const r = this.tmpV2.set(-f.z, 0, f.x);
-    const ix = this.input.moveX, iz = this.input.moveZ;
+    const ix = this.input.moveX,
+      iz = this.input.moveZ;
 
     if (p.slideT > 0) {
       p.slideT -= dt;
@@ -976,8 +1450,13 @@ export class GameEngine {
     // jump pads
     if (p.padCd > 0) p.padCd -= dt;
     for (const pad of this.map.pads) {
-      const dx = p.pos.x - pad.x, dz = p.pos.z - pad.z;
-      if (dx * dx + dz * dz < 0.81 && Math.abs(p.pos.y - pad.y) < 0.9 && p.padCd <= 0) {
+      const dx = p.pos.x - pad.x,
+        dz = p.pos.z - pad.z;
+      if (
+        dx * dx + dz * dz < 0.81 &&
+        Math.abs(p.pos.y - pad.y) < 0.9 &&
+        p.padCd <= 0
+      ) {
         p.vel.y = TUNE.padLaunch;
         p.padCd = 0.35;
         p.onGround = false;
@@ -995,20 +1474,28 @@ export class GameEngine {
         }
         continue;
       }
-      const dx = p.pos.x - wp.group.position.x, dz = p.pos.z - wp.group.position.z;
+      const dx = p.pos.x - wp.group.position.x,
+        dz = p.pos.z - wp.group.position.z;
       if (dx * dx + dz * dz < 1.1 && p.pos.y < 1.6) {
         wp.taken = true;
         wp.respawnT = this.now + 20;
         wp.group.visible = false;
         this.switchWeapon(wp.weapon);
-        p.ammo[wp.weapon] = { mag: WEAPONS[wp.weapon].mag, reserve: WEAPONS[wp.weapon].reserve };
+        p.ammo[wp.weapon] = {
+          mag: WEAPONS[wp.weapon].mag,
+          reserve: WEAPONS[wp.weapon].reserve,
+        };
         this.announce("PICKUP", WEAPONS[wp.weapon].name);
         sfx.play("pickup");
       }
     }
 
     // regen
-    if (p.hp < TUNE.maxHp && p.alive && this.now - p.lastDamageT > TUNE.regenDelay) {
+    if (
+      p.hp < TUNE.maxHp &&
+      p.alive &&
+      this.now - p.lastDamageT > TUNE.regenDelay
+    ) {
       p.hp = Math.min(TUNE.maxHp, p.hp + TUNE.regenRate * dt);
     }
     if (p.spawnProtectT > 0) p.spawnProtectT -= dt;
@@ -1028,7 +1515,8 @@ export class GameEngine {
       }
     }
     // fire
-    const wantFire = this.input.fire || (this.settings.autoFire && this.isMobile);
+    const wantFire =
+      this.input.fire || (this.settings.autoFire && this.isMobile);
     const fireEdge = w.auto ? wantFire : wantFire && !this.prevFire;
     this.prevFire = wantFire;
     if (fireEdge) this.firePlayer();
@@ -1047,8 +1535,10 @@ export class GameEngine {
       arenaHalf: this.map.size,
       entities: [this.player, ...this.bots],
       colliders: this.colliders,
-      fireAt: (bot, target, spread, dmgMul) => this.botFire(bot, target, spread, dmgMul),
-      worldHit: (ox, oy, oz, dx, dy, dz, max) => raycastWorld(this.colliders, ox, oy, oz, dx, dy, dz, max),
+      fireAt: (bot, target, spread, dmgMul) =>
+        this.botFire(bot, target, spread, dmgMul),
+      worldHit: (ox, oy, oz, dx, dy, dz, max) =>
+        raycastWorld(this.colliders, ox, oy, oz, dx, dy, dz, max),
     };
     for (const b of this.bots) {
       if (!b.alive) {
@@ -1056,7 +1546,7 @@ export class GameEngine {
         if (b.deadT <= 0) this.spawnEntity(b);
         else if (b.rig && b.rig.fallT > 0 && b.rig.fallT < 1) {
           b.rig.fallT = Math.min(1, b.rig.fallT + dt * 3.2);
-          b.rig.group.rotation.x = -b.rig.fallT * Math.PI / 2;
+          b.rig.group.rotation.x = (-b.rig.fallT * Math.PI) / 2;
         }
         continue;
       }
@@ -1080,8 +1570,13 @@ export class GameEngine {
       this.moveEntity(b, dt);
       // pads for bots too
       for (const pad of this.map.pads) {
-        const dx = b.pos.x - pad.x, dz = b.pos.z - pad.z;
-        if (dx * dx + dz * dz < 0.81 && Math.abs(b.pos.y - pad.y) < 0.9 && b.padCd <= 0) {
+        const dx = b.pos.x - pad.x,
+          dz = b.pos.z - pad.z;
+        if (
+          dx * dx + dz * dz < 0.81 &&
+          Math.abs(b.pos.y - pad.y) < 0.9 &&
+          b.padCd <= 0
+        ) {
           b.vel.y = TUNE.padLaunch;
           b.padCd = 0.35;
           b.onGround = false;
@@ -1092,7 +1587,7 @@ export class GameEngine {
         const rig = b.rig;
         if (rig.fallT > 0 && rig.fallT < 1) {
           rig.fallT = Math.min(1, rig.fallT + dt * 3.2);
-          rig.group.rotation.x = -rig.fallT * Math.PI / 2;
+          rig.group.rotation.x = (-rig.fallT * Math.PI) / 2;
           if (rig.fallT >= 1) rig.group.rotation.x = -Math.PI / 2;
         }
         rig.group.position.copy(b.pos);
@@ -1114,7 +1609,8 @@ export class GameEngine {
     if (p.onGround && p.alive) {
       this.bobT += dt * (4 + speedF * 6);
     }
-    const bobY = Math.abs(Math.sin(this.bobT)) * 0.035 * speedF * (p.alive ? 1 : 0);
+    const bobY =
+      Math.abs(Math.sin(this.bobT)) * 0.035 * speedF * (p.alive ? 1 : 0);
     const bobX = Math.sin(this.bobT) * 0.02 * speedF * (p.alive ? 1 : 0);
 
     this.camera.position.set(p.pos.x + bobX, p.pos.y + eyeH + bobY, p.pos.z);
@@ -1131,7 +1627,11 @@ export class GameEngine {
 
     if (p.alive) {
       this.camera.rotation.y = p.yaw + shY * 0.15;
-      this.camera.rotation.x = clamp(p.pitch + this.recoilPitch + shX * 0.15, -1.5, 1.5);
+      this.camera.rotation.x = clamp(
+        p.pitch + this.recoilPitch + shX * 0.15,
+        -1.5,
+        1.5,
+      );
       this.camera.rotation.z = shZ;
     } else {
       this.camera.rotation.x = -0.5;
@@ -1140,7 +1640,11 @@ export class GameEngine {
 
     // fov
     const w = WEAPONS[p.weapon];
-    const targetFov = this.input.ads ? w.zoomMul * this.baseFov : this.baseFov + (this.input.sprintHeld && this.horizSpeed(p) > 4 ? 8 : 0) + (p.slideT > 0 ? 6 : 0);
+    const targetFov = this.input.ads
+      ? w.zoomMul * this.baseFov
+      : this.baseFov +
+        (this.input.sprintHeld && this.horizSpeed(p) > 4 ? 8 : 0) +
+        (p.slideT > 0 ? 6 : 0);
     this.fov = damp(this.fov, targetFov, 12, dt);
     if (Math.abs(this.camera.fov - this.fov) > 0.05) {
       this.camera.fov = this.fov;
@@ -1150,14 +1654,20 @@ export class GameEngine {
     // viewmodel
     const vm = this.vms.get(p.weapon);
     if (vm) {
-      for (const [id, v] of this.vms) v.group.visible = id === p.weapon && p.alive;
+      for (const [id, v] of this.vms)
+        v.group.visible = id === p.weapon && p.alive;
       if (p.alive) {
         const ads = this.input.ads;
         const tx = ads ? 0 : 0.3;
         const ty = ads ? -0.19 : -0.27;
         const tz = ads ? -0.38 : -0.5;
         vm.group.position.x = damp(vm.group.position.x, tx, 14, dt);
-        vm.group.position.y = damp(vm.group.position.y, ty + bobY * 0.6, 14, dt);
+        vm.group.position.y = damp(
+          vm.group.position.y,
+          ty + bobY * 0.6,
+          14,
+          dt,
+        );
         vm.group.position.z = damp(vm.group.position.z, tz, 14, dt);
         // sway from look
         this.swayX = damp(this.swayX, 0, 8, dt);
@@ -1188,7 +1698,11 @@ export class GameEngine {
     if (this.state !== "paused") {
       const sens = this.settings.sens * 0.0021 * (this.fov / this.baseFov);
       this.player.yaw -= this.input.lookDX * sens;
-      this.player.pitch = clamp(this.player.pitch - this.input.lookDY * sens, -1.5, 1.5);
+      this.player.pitch = clamp(
+        this.player.pitch - this.input.lookDY * sens,
+        -1.5,
+        1.5,
+      );
       this.swayX = clamp(this.swayX + this.input.lookDX * 0.0009, -0.06, 0.06);
       this.swayY = clamp(this.swayY + this.input.lookDY * 0.0009, -0.06, 0.06);
     }
@@ -1207,7 +1721,10 @@ export class GameEngine {
       this.fx.update(dt);
       if (this.warmupT <= 0) {
         this.state = "playing";
-        this.announce("FIGHT!", `${this.config.botCount + 1} players · ${MAP_LABEL[this.config.map]}`);
+        this.announce(
+          "FIGHT!",
+          `${this.config.botCount + 1} players · ${MAP_LABEL[this.config.map]}`,
+        );
         sfx.play("go");
         sfx.startMusic();
       }
@@ -1284,10 +1801,16 @@ export class GameEngine {
         warmup: Math.max(0, this.warmupT),
         timeLeft: Math.max(0, this.timeLeft),
         hp: Math.ceil(p.hp),
-        mag: a.mag, reserve: a.reserve,
-        reloadT: p.reloadT, reloadDur: w.reload,
-        weapon: p.weapon, weaponName: w.name,
-        score: p.score, kills: p.kills, deaths: p.deaths, streak: p.streak,
+        mag: a.mag,
+        reserve: a.reserve,
+        reloadT: p.reloadT,
+        reloadDur: w.reload,
+        weapon: p.weapon,
+        weaponName: w.name,
+        score: p.score,
+        kills: p.kills,
+        deaths: p.deaths,
+        streak: p.streak,
         feed: [...this.feed],
         announceKey: this.announceKey,
         announceText: this.announceText,
@@ -1316,9 +1839,12 @@ export class GameEngine {
   }
 
   /** Wired by the host's net client: a hit on a networked human. */
-  onReportHit: ((targetPlayerId: string, dmg: number, head: boolean) => void) | null = null;
+  onReportHit:
+    ((targetPlayerId: string, dmg: number, head: boolean) => void) | null =
+    null;
   /** Wired by a guest's net client: a hit on a host-simulated bot. */
-  onReportBotHit: ((botId: number, dmg: number, head: boolean) => void) | null = null;
+  onReportBotHit: ((botId: number, dmg: number, head: boolean) => void) | null =
+    null;
 
   resize = () => {
     const parent = this.canvas.parentElement;
@@ -1363,12 +1889,50 @@ export class GameEngine {
         if (b.rig) this.scene.remove(b.rig.group);
       }
       this.bots = [];
+    } else {
+      this.assignBotTeams();
     }
     this.markHud();
   }
 
+  /**
+   * Spread bots across the teams that actually exist so every side gets
+   * allies. Without this bots share `undefined` as their team, which made
+   * `canHurt` return false between them — bots would stop fighting entirely.
+   */
+  private assignBotTeams(): void {
+    if (this.mpTeamMode !== "teams") {
+      for (const b of this.bots) b.team = 0;
+      return;
+    }
+    // Collect the team indices humans occupy (remote players may not have
+    // arrived yet, so seed with the local player's team).
+    const teams = new Set<number>([this.mpMyTeam]);
+    for (const r of this.remotes.values())
+      if (typeof r.team === "number") teams.add(r.team);
+    // Ensure there are at least two sides to fight.
+    if (teams.size < 2) teams.add(this.mpMyTeam === 0 ? 1 : 0);
+    const list = [...teams].sort((a, b) => a - b);
+    this.bots.forEach((b, i) => {
+      b.team = list[i % list.length];
+    });
+  }
+
   setHostRole(isHost: boolean): void {
     this.mpIsHost = isHost;
+  }
+
+  /**
+   * Adopt the team the SERVER assigned us. Without this the engine assumes
+   * team 0, which in Teams mode inverts the rules — you could shoot your own
+   * teammates and couldn't shoot the enemy.
+   */
+  setMyTeam(team: number): void {
+    if (this.mpMyTeam === team && this.player.team === team) return;
+    this.mpMyTeam = team;
+    this.player.team = team;
+    this.assignBotTeams();
+    this.markHud();
   }
 
   /** Can attacker hurt target? Applies the team rules. */
@@ -1400,16 +1964,32 @@ export class GameEngine {
       color,
       pos: new THREE.Vector3(),
       vel: new THREE.Vector3(),
-      yaw: 0, pitch: 0,
-      onGround: false, crouch: false,
-      slideT: 0, slideDir: new THREE.Vector3(),
-      hp: 100, alive: true, weapon: "ar",
+      yaw: 0,
+      pitch: 0,
+      onGround: false,
+      crouch: false,
+      slideT: 0,
+      slideDir: new THREE.Vector3(),
+      hp: 100,
+      alive: true,
+      weapon: "ar",
       ammo: this.freshAmmo(),
-      fireCd: 0, reloadT: 0,
-      kills: 0, deaths: 0, score: 0, streak: 0,
-      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      fireCd: 0,
+      reloadT: 0,
+      kills: 0,
+      deaths: 0,
+      score: 0,
+      streak: 0,
+      lastDamageT: -10,
+      deadT: 0,
+      spawnProtectT: 0,
+      padCd: 0,
       input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
-      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+      ads: false,
+      shots: 0,
+      hits: 0,
+      dmgDealt: 0,
+      bestStreak: 0,
     };
     e.rig = makeCharacter(name, color);
     this.scene.add(e.rig.group);
@@ -1420,8 +2000,10 @@ export class GameEngine {
   /** Called on every net tick with the roster + interpolated samples. */
   updateRemotePlayers(input: RemotePlayersInput): void {
     const seen = new Set<string>();
+    let newJoiner = false;
     for (const p of input.players) {
       if (p.playerId === this.player.netId) continue;
+      if (!this.remotes.has(p.playerId)) newJoiner = true;
       seen.add(p.playerId);
       const e = this.ensureRemote(p.playerId, p.name, p.color);
       e.team = p.team;
@@ -1463,7 +2045,10 @@ export class GameEngine {
       if (seen.has(id)) continue;
       if (e.rig) this.scene.remove(e.rig.group);
       this.remotes.delete(id);
+      newJoiner = true;
     }
+    // Roster changed → rebalance bot teams so each side keeps allies.
+    if (newJoiner && this.mpIsHost) this.assignBotTeams();
   }
 
   /** Guest: build/refresh bots from the host's snapshot. */
@@ -1474,16 +2059,38 @@ export class GameEngine {
       let e = this.netBots.get(b.id);
       if (!e) {
         e = {
-          id: b.id, name: b.name, isBot: true, color: b.color,
-          pos: new THREE.Vector3(), vel: new THREE.Vector3(),
-          yaw: 0, pitch: 0, onGround: false, crouch: false,
-          slideT: 0, slideDir: new THREE.Vector3(),
-          hp: b.hp, alive: b.alive, weapon: "ar",
+          id: b.id,
+          name: b.name,
+          isBot: true,
+          color: b.color,
+          pos: new THREE.Vector3(),
+          vel: new THREE.Vector3(),
+          yaw: 0,
+          pitch: 0,
+          onGround: false,
+          crouch: false,
+          slideT: 0,
+          slideDir: new THREE.Vector3(),
+          hp: b.hp,
+          alive: b.alive,
+          weapon: "ar",
           ammo: this.freshAmmo(),
-          fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
-          lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+          fireCd: 0,
+          reloadT: 0,
+          kills: 0,
+          deaths: 0,
+          score: 0,
+          streak: 0,
+          lastDamageT: -10,
+          deadT: 0,
+          spawnProtectT: 0,
+          padCd: 0,
           input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
-          ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+          ads: false,
+          shots: 0,
+          hits: 0,
+          dmgDealt: 0,
+          bestStreak: 0,
         };
         e.rig = makeCharacter(b.name, b.color);
         this.scene.add(e.rig.group);
@@ -1506,7 +2113,11 @@ export class GameEngine {
           rig.group.rotation.x = -Math.PI / 2;
           rig.hpSprite.visible = false;
         } else {
-          if (rig.fallT > 0) { rig.fallT = 0; rig.group.rotation.x = 0; rig.lastHpDrawn = -1; }
+          if (rig.fallT > 0) {
+            rig.fallT = 0;
+            rig.group.rotation.x = 0;
+            rig.lastHpDrawn = -1;
+          }
           rig.hpSprite.visible = true;
           rig.group.position.copy(e.pos);
           rig.group.rotation.y = e.yaw;
@@ -1558,15 +2169,39 @@ export class GameEngine {
     const existing = this.proxyCache.get(name);
     if (existing) return existing;
     const proxy: Ent = {
-      id: this.netBotSeq++, name, isBot: false, remote: true, color: 0x94a3b8,
-      pos: new THREE.Vector3(), vel: new THREE.Vector3(),
-      yaw: 0, pitch: 0, onGround: false, crouch: false,
-      slideT: 0, slideDir: new THREE.Vector3(),
-      hp: 1, alive: true, weapon: "ar", ammo: this.freshAmmo(),
-      fireCd: 0, reloadT: 0, kills: 0, deaths: 0, score: 0, streak: 0,
-      lastDamageT: -10, deadT: 0, spawnProtectT: 0, padCd: 0,
+      id: this.netBotSeq++,
+      name,
+      isBot: false,
+      remote: true,
+      color: 0x94a3b8,
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      yaw: 0,
+      pitch: 0,
+      onGround: false,
+      crouch: false,
+      slideT: 0,
+      slideDir: new THREE.Vector3(),
+      hp: 1,
+      alive: true,
+      weapon: "ar",
+      ammo: this.freshAmmo(),
+      fireCd: 0,
+      reloadT: 0,
+      kills: 0,
+      deaths: 0,
+      score: 0,
+      streak: 0,
+      lastDamageT: -10,
+      deadT: 0,
+      spawnProtectT: 0,
+      padCd: 0,
       input: { x: 0, z: 0, jump: false, sprint: false, crouch: false },
-      ads: false, shots: 0, hits: 0, dmgDealt: 0, bestStreak: 0,
+      ads: false,
+      shots: 0,
+      hits: 0,
+      dmgDealt: 0,
+      bestStreak: 0,
       team: this.mpTeamMode === "ffa" ? -1 : -2,
     };
     this.proxyCache.set(name, proxy);
@@ -1578,9 +2213,13 @@ export class GameEngine {
   netLocalState() {
     const p = this.player;
     return {
-      x: p.pos.x, y: p.pos.y, z: p.pos.z,
-      yaw: p.yaw, pitch: p.pitch,
-      hp: Math.ceil(p.hp), alive: p.alive,
+      x: p.pos.x,
+      y: p.pos.y,
+      z: p.pos.z,
+      yaw: p.yaw,
+      pitch: p.pitch,
+      hp: Math.ceil(p.hp),
+      alive: p.alive,
       weapon: p.weapon,
       deaths: p.deaths,
       streak: p.streak,
@@ -1594,11 +2233,20 @@ export class GameEngine {
   buildSnapshot(tick: number, timeLeft: number, extraEvents: NetEventIn[]) {
     const bots: Array<Record<string, unknown>> = this.mpIsHost
       ? this.bots.map((b) => ({
-          id: b.id, name: b.name, color: b.color, team: b.team,
-          x: round2(b.pos.x), y: round2(b.pos.y), z: round2(b.pos.z),
-          yaw: round2(b.yaw), pitch: round2(b.pitch),
-          hp: Math.ceil(b.hp), alive: b.alive,
-          kills: b.kills, deaths: b.deaths, score: b.score,
+          id: b.id,
+          name: b.name,
+          color: b.color,
+          team: b.team,
+          x: round2(b.pos.x),
+          y: round2(b.pos.y),
+          z: round2(b.pos.z),
+          yaw: round2(b.yaw),
+          pitch: round2(b.pitch),
+          hp: Math.ceil(b.hp),
+          alive: b.alive,
+          kills: b.kills,
+          deaths: b.deaths,
+          score: b.score,
         }))
       : [];
     return {
@@ -1612,16 +2260,42 @@ export class GameEngine {
   /** Scoreboard across humans (local + remote). */
   netStandings(): Standing[] {
     const rows: Standing[] = [
-      { name: this.player.name, color: this.player.color, kills: this.player.kills, deaths: this.player.deaths, score: this.player.score, isPlayer: true, team: this.player.team },
+      {
+        name: this.player.name,
+        color: this.player.color,
+        kills: this.player.kills,
+        deaths: this.player.deaths,
+        score: this.player.score,
+        isPlayer: true,
+        team: this.player.team,
+      },
     ];
     for (const r of this.remotes.values()) {
-      rows.push({ name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, score: r.score, isPlayer: false, team: r.team });
+      rows.push({
+        name: r.name,
+        color: r.color,
+        kills: r.kills,
+        deaths: r.deaths,
+        score: r.score,
+        isPlayer: false,
+        team: r.team,
+      });
     }
     const bots = this.mpIsHost ? this.bots : [...this.netBots.values()];
     for (const b of bots) {
-      rows.push({ name: b.name, color: b.color, kills: b.kills, deaths: b.deaths, score: b.score, isPlayer: false, team: b.team });
+      rows.push({
+        name: b.name,
+        color: b.color,
+        kills: b.kills,
+        deaths: b.deaths,
+        score: b.score,
+        isPlayer: false,
+        team: b.team,
+      });
     }
-    return rows.sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
+    return rows.sort(
+      (a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths,
+    );
   }
 }
 

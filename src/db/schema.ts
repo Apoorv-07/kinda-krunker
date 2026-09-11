@@ -103,6 +103,10 @@ export const parties = pgTable("parties", {
   code: text("code").notNull().unique(),
   leaderName: text("leader_name").notNull(),
   stackId: text("stack_id").notNull(),
+  /** the match this party is currently sitting in — the whole party can
+      one-click join it, which is how friends land in the same game */
+  lobbyCode: text("lobby_code"),
+  lobbyName: text("lobby_name"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

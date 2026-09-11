@@ -38,7 +38,8 @@ export async function GET() {
         envConfigured: true,
         envVar,
         tables: false,
-        reason: "Connection string exists but the database could not be reached.",
+        reason:
+          "Connection string exists but the database could not be reached.",
         detail: describe(err),
       },
       { status: 500 },
@@ -49,7 +50,13 @@ export async function GET() {
   try {
     await ensureSchema();
     const tables = await schemaExists();
-    return Response.json({ ok: tables, envConfigured: true, envVar, db: "reachable", tables });
+    return Response.json({
+      ok: tables,
+      envConfigured: true,
+      envVar,
+      db: "reachable",
+      tables,
+    });
   } catch (err) {
     return Response.json(
       {
@@ -58,7 +65,8 @@ export async function GET() {
         envVar,
         db: "reachable",
         tables: false,
-        reason: "Connected, but could not create the tables. Check that the database user has CREATE permission.",
+        reason:
+          "Connected, but could not create the tables. Check that the database user has CREATE permission.",
         detail: describe(err),
       },
       { status: 500 },
@@ -68,6 +76,11 @@ export async function GET() {
 
 function describe(err: unknown): string {
   const e = err as { cause?: unknown; message?: string } | null;
-  const cause = e?.cause instanceof Error ? e.cause.message : e?.cause ? String(e.cause) : "";
+  const cause =
+    e?.cause instanceof Error
+      ? e.cause.message
+      : e?.cause
+        ? String(e.cause)
+        : "";
   return (cause || e?.message || String(err)).slice(0, 300);
 }

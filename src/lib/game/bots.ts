@@ -30,7 +30,8 @@ export interface CharacterRig {
 
 function makeFaceTexture(color: number): THREE.CanvasTexture {
   const c = document.createElement("canvas");
-  c.width = 64; c.height = 64;
+  c.width = 64;
+  c.height = 64;
   const g = c.getContext("2d")!;
   const col = "#" + color.toString(16).padStart(6, "0");
   g.fillStyle = col;
@@ -52,7 +53,8 @@ function makeFaceTexture(color: number): THREE.CanvasTexture {
 
 function makeNameTexture(name: string, color: number): THREE.CanvasTexture {
   const c = document.createElement("canvas");
-  c.width = 256; c.height = 64;
+  c.width = 256;
+  c.height = 64;
   const g = c.getContext("2d")!;
   g.font = "bold 30px ui-monospace, monospace";
   g.textAlign = "center";
@@ -71,13 +73,21 @@ export function makeCharacter(name: string, color: number): CharacterRig {
   const group = new THREE.Group();
   const mats: THREE.MeshStandardMaterial[] = [];
   const mat = (c: number) => {
-    const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, metalness: 0.15 });
+    const m = new THREE.MeshStandardMaterial({
+      color: c,
+      roughness: 0.7,
+      metalness: 0.15,
+    });
     mats.push(m);
     return m;
   };
   const bodyMat = mat(color);
   const darkMat = mat(0x1a1d29);
-  const headMat = new THREE.MeshStandardMaterial({ map: makeFaceTexture(color), roughness: 0.7, metalness: 0.1 });
+  const headMat = new THREE.MeshStandardMaterial({
+    map: makeFaceTexture(color),
+    roughness: 0.7,
+    metalness: 0.1,
+  });
   mats.push(headMat);
 
   // body
@@ -114,9 +124,15 @@ export function makeCharacter(name: string, color: number): CharacterRig {
   const rLeg = mkLeg(1);
   // gun in right hand
   const gun = new THREE.Group();
-  const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.62), darkMat);
+  const gunBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.16, 0.62),
+    darkMat,
+  );
   gun.add(gunBody);
-  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.34), mat(0x333844));
+  const barrel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.05, 0.05, 0.34),
+    mat(0x333844),
+  );
   barrel.position.set(0, 0.02, -0.44);
   gun.add(barrel);
   const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.22, 0.1), darkMat);
@@ -127,27 +143,57 @@ export function makeCharacter(name: string, color: number): CharacterRig {
   rArm.add(gun);
 
   // name tag
-  const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: makeNameTexture(name, color), transparent: true, depthWrite: false,
-  }));
+  const nameSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeNameTexture(name, color),
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
   nameSprite.scale.set(1.9, 0.47, 1);
   nameSprite.position.y = 2.15;
   group.add(nameSprite);
 
   // HP bar
   const hpCanvas = document.createElement("canvas");
-  hpCanvas.width = 128; hpCanvas.height = 16;
+  hpCanvas.width = 128;
+  hpCanvas.height = 16;
   const hpCtx = hpCanvas.getContext("2d")!;
-  const hpSprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(hpCanvas), transparent: true, depthWrite: false,
-  }));
+  const hpSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(hpCanvas),
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
   hpSprite.scale.set(1.05, 0.13, 1);
   hpSprite.position.y = 1.92;
   group.add(hpSprite);
 
-  group.traverse((o) => { o.frustumCulled = false; o.renderOrder = 5; });
+  group.traverse((o) => {
+    o.frustumCulled = false;
+    o.renderOrder = 5;
+  });
 
-  return { group, body, head, lArm, rArm, lLeg, rLeg, gun, nameSprite, hpSprite, hpCanvas, hpCtx, mats, walkPhase: 0, flashT: 0, fallT: 0, lastHpDrawn: -1 };
+  return {
+    group,
+    body,
+    head,
+    lArm,
+    rArm,
+    lLeg,
+    rLeg,
+    gun,
+    nameSprite,
+    hpSprite,
+    hpCanvas,
+    hpCtx,
+    mats,
+    walkPhase: 0,
+    flashT: 0,
+    fallT: 0,
+    lastHpDrawn: -1,
+  };
 }
 
 export function drawHpBar(rig: CharacterRig, hp: number, maxHp: number) {
@@ -163,7 +209,12 @@ export function drawHpBar(rig: CharacterRig, hp: number, maxHp: number) {
   (rig.hpSprite.material as THREE.SpriteMaterial).map!.needsUpdate = true;
 }
 
-export function updateCharacterAnim(rig: CharacterRig, speed: number, pitch: number, dt: number) {
+export function updateCharacterAnim(
+  rig: CharacterRig,
+  speed: number,
+  pitch: number,
+  dt: number,
+) {
   if (rig.fallT > 0) {
     // lying dead — no anim
     return;
@@ -197,9 +248,24 @@ export interface BotCtx {
   difficulty: Difficulty;
   arenaHalf: number;
   entities: Ent[];
-  colliders: { x: number; y: number; z: number; w: number; h: number; d: number }[];
+  colliders: {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    h: number;
+    d: number;
+  }[];
   fireAt: (bot: Ent, target: Ent, spread: number, dmg: number) => void;
-  worldHit: (ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, max: number) => number;
+  worldHit: (
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    max: number,
+  ) => number;
 }
 
 export interface BotBrain {
@@ -226,7 +292,9 @@ export function makeBotBrain(rng: () => number): BotBrain {
     strafeT: 0.6 + rng(),
     dodgeT: 1 + rng() * 2,
     targetId: -1,
-    lastX: 0, lastZ: 0, stuckT: 0,
+    lastX: 0,
+    lastZ: 0,
+    stuckT: 0,
   };
 }
 
@@ -249,19 +317,30 @@ export function tickBot(bot: Ent, ctx: BotCtx, dt: number) {
   for (const e of ctx.entities) {
     if (e === bot || !e.alive) continue;
     if (e.spawnProtectT > 0) continue;
-    const dx = e.pos.x - bot.pos.x, dz = e.pos.z - bot.pos.z;
+    const dx = e.pos.x - bot.pos.x,
+      dz = e.pos.z - bot.pos.z;
     const d = Math.hypot(dx, dz);
     if (d > bestD) continue;
-    const dirX = dx / d, dirZ = dz / d;
-    const dy = (e.pos.y + 1.2) - eyeY;
-    const wh = ctx.worldHit(bot.pos.x, eyeY, bot.pos.z, dirX, dy / d, dirZ, d - 0.5);
+    const dirX = dx / d,
+      dirZ = dz / d;
+    const dy = e.pos.y + 1.2 - eyeY;
+    const wh = ctx.worldHit(
+      bot.pos.x,
+      eyeY,
+      bot.pos.z,
+      dirX,
+      dy / d,
+      dirZ,
+      d - 0.5,
+    );
     if (wh < d - 0.5) continue;
     target = e;
     bestD = d;
   }
 
   // --- movement intent -------------------------------------------------------
-  let ix = 0, iz = 0;
+  let ix = 0,
+    iz = 0;
   let jump = false;
   let sprint = false;
 
@@ -270,17 +349,25 @@ export function tickBot(bot: Ent, ctx: BotCtx, dt: number) {
       brain.targetId = target.id;
       brain.reactT = tun.react * (0.8 + rng() * 0.5);
     }
-    const dx = target.pos.x - bot.pos.x, dz = target.pos.z - bot.pos.z;
+    const dx = target.pos.x - bot.pos.x,
+      dz = target.pos.z - bot.pos.z;
     const d = Math.hypot(dx, dz);
     const wantYaw = Math.atan2(dx, dz);
     bot.yaw = angleLerp(bot.yaw, wantYaw, 7.5 * dt);
-    bot.pitch = THREE.MathUtils.clamp(Math.atan2(target.pos.y + 1.1 - eyeY, Math.max(0.1, d)), -1.1, 1.1);
+    bot.pitch = THREE.MathUtils.clamp(
+      Math.atan2(target.pos.y + 1.1 - eyeY, Math.max(0.1, d)),
+      -1.1,
+      1.1,
+    );
 
     if (d > 13) {
-      ix = dx / d; iz = dz / d; sprint = true;
+      ix = dx / d;
+      iz = dz / d;
+      sprint = true;
     } else if (d < 6) {
       // back off while still facing
-      ix = -dx / d * 0.7; iz = -dz / d * 0.7;
+      ix = (-dx / d) * 0.7;
+      iz = (-dz / d) * 0.7;
     } else {
       // strafe
       brain.strafeT -= dt;
@@ -309,18 +396,25 @@ export function tickBot(bot: Ent, ctx: BotCtx, dt: number) {
     brain.targetId = -1;
     // patrol toward dest
     brain.repathT -= dt;
-    const dx = brain.dest.x - bot.pos.x, dz = brain.dest.z - bot.pos.z;
+    const dx = brain.dest.x - bot.pos.x,
+      dz = brain.dest.z - bot.pos.z;
     const d = Math.hypot(dx, dz);
     if (d < 1.6 || brain.repathT <= 0) {
-      brain.dest.set(rng() * (ctx.arenaHalf * 2 - 6) - ctx.arenaHalf + 3, 0, rng() * (ctx.arenaHalf * 2 - 6) - ctx.arenaHalf + 3);
+      brain.dest.set(
+        rng() * (ctx.arenaHalf * 2 - 6) - ctx.arenaHalf + 3,
+        0,
+        rng() * (ctx.arenaHalf * 2 - 6) - ctx.arenaHalf + 3,
+      );
       brain.repathT = 4 + rng() * 5;
     } else {
-      ix = dx / d; iz = dz / d;
+      ix = dx / d;
+      iz = dz / d;
       sprint = rng() > 0.6;
     }
     // stuck detection → jump + new dest
     const moved = Math.hypot(bot.pos.x - brain.lastX, bot.pos.z - brain.lastZ);
-    brain.lastX = bot.pos.x; brain.lastZ = bot.pos.z;
+    brain.lastX = bot.pos.x;
+    brain.lastZ = bot.pos.z;
     if (moved < 0.02) {
       brain.stuckT += dt;
       if (brain.stuckT > 0.4) {
@@ -335,7 +429,10 @@ export function tickBot(bot: Ent, ctx: BotCtx, dt: number) {
 
   // write intent (engine physics consumes it)
   const len = Math.hypot(ix, iz);
-  if (len > 0.01) { ix /= len; iz /= len; }
+  if (len > 0.01) {
+    ix /= len;
+    iz /= len;
+  }
   bot.input.x = ix;
   bot.input.z = iz;
   bot.input.jump = jump;

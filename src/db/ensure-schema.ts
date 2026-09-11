@@ -84,6 +84,8 @@ const DDL: string[] = [
      "code" TEXT NOT NULL UNIQUE,
      "leader_name" TEXT NOT NULL,
      "stack_id" TEXT NOT NULL,
+     "lobby_code" TEXT,
+     "lobby_name" TEXT,
      "created_at" TIMESTAMP NOT NULL DEFAULT now()
    )`,
   `CREATE INDEX IF NOT EXISTS "lobby_players_lobby_idx" ON "lobby_players" ("lobby_code")`,
@@ -101,6 +103,8 @@ const MIGRATIONS: Array<{ column: string; ddl: string }> = [
   { column: "host_player_id", ddl: `ALTER TABLE "lobbies" ADD COLUMN IF NOT EXISTS "host_player_id" TEXT` },
   { column: "status", ddl: `ALTER TABLE "lobbies" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'waiting'` },
   { column: "bot_hits", ddl: `ALTER TABLE "lobby_players" ADD COLUMN IF NOT EXISTS "bot_hits" JSONB NOT NULL DEFAULT '[]'` },
+  { column: "parties.lobby_code", ddl: `ALTER TABLE "parties" ADD COLUMN IF NOT EXISTS "lobby_code" TEXT` },
+  { column: "parties.lobby_name", ddl: `ALTER TABLE "parties" ADD COLUMN IF NOT EXISTS "lobby_name" TEXT` },
 ];
 
 const globalForSchema = globalThis as typeof globalThis & {
@@ -128,6 +132,22 @@ export function ensureSchema(): Promise<void> {
     });
   }
   return globalForSchema.__arenaSchemaReady;
+}
+
+/**
+ * Forget the memoized result so the next call re-runs the DDL. Called when a
+ * query reports a missing relation — e.g. someone dropped a table, or the
+ * database was swapped underneath a long-lived serverless instance.
+ */
+export function invalidateSchema(): void {
+  globalForSchema.__arenaSchemaReady = undefined;
+}
+
+/** True when the error is "table does not exist". */
+export function isMissingRelation(err: unknown): boolean {
+  const msg = ((err as { message?: string } | null)?.message ?? String(err)).toLowerCase();
+  const cause = (err as { cause?: { message?: string } } | null)?.cause?.message?.toLowerCase() ?? "";
+  return msg.includes("does not exist") || cause.includes("does not exist");
 }
 
 /** True when the lobbies/scores tables are present (used by /api/health). */

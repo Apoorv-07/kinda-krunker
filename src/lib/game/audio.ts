@@ -3,10 +3,27 @@
 // ---------------------------------------------------------------------------
 
 export type SfxName =
-  | "shoot_ar" | "shoot_smg" | "shoot_shotgun" | "shoot_sniper"
-  | "hit" | "headshot" | "kill" | "dmg" | "die"
-  | "reload" | "jump" | "land" | "pad" | "pickup"
-  | "count" | "go" | "win" | "lose" | "ui" | "empty" | "slide";
+  | "shoot_ar"
+  | "shoot_smg"
+  | "shoot_shotgun"
+  | "shoot_sniper"
+  | "hit"
+  | "headshot"
+  | "kill"
+  | "dmg"
+  | "die"
+  | "reload"
+  | "jump"
+  | "land"
+  | "pad"
+  | "pickup"
+  | "count"
+  | "go"
+  | "win"
+  | "lose"
+  | "ui"
+  | "empty"
+  | "slide";
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -25,7 +42,10 @@ class SoundEngine {
       return;
     }
     try {
-      const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      const AC =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
@@ -44,12 +64,22 @@ class SoundEngine {
 
   setVolume(v: number) {
     this.volume = v;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : v, this.ctx.currentTime, 0.02);
+    if (this.master && this.ctx)
+      this.master.gain.setTargetAtTime(
+        this.muted ? 0 : v,
+        this.ctx.currentTime,
+        0.02,
+      );
   }
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(m ? 0 : this.volume, this.ctx.currentTime, 0.02);
+    if (this.master && this.ctx)
+      this.master.gain.setTargetAtTime(
+        m ? 0 : this.volume,
+        this.ctx.currentTime,
+        0.02,
+      );
   }
 
   private noiseBuffer(dur: number): AudioBuffer | null {
@@ -62,8 +92,13 @@ class SoundEngine {
   }
 
   private tone(
-    freq: number, type: OscillatorType, dur: number,
-    gain: number, freqEnd?: number, delay = 0, dest?: AudioNode,
+    freq: number,
+    type: OscillatorType,
+    dur: number,
+    gain: number,
+    freqEnd?: number,
+    delay = 0,
+    dest?: AudioNode,
   ) {
     if (!this.ctx || !this.master) return;
     const t0 = this.ctx.currentTime + delay;
@@ -71,7 +106,11 @@ class SoundEngine {
     const g = this.ctx.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, t0);
-    if (freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), t0 + dur);
+    if (freqEnd !== undefined)
+      osc.frequency.exponentialRampToValueAtTime(
+        Math.max(1, freqEnd),
+        t0 + dur,
+      );
     g.gain.setValueAtTime(gain, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     osc.connect(g);
@@ -80,7 +119,14 @@ class SoundEngine {
     osc.stop(t0 + dur + 0.02);
   }
 
-  private noise(dur: number, gain: number, filterFreq: number, type: BiquadFilterType = "lowpass", delay = 0, q = 0.8) {
+  private noise(
+    dur: number,
+    gain: number,
+    filterFreq: number,
+    type: BiquadFilterType = "lowpass",
+    delay = 0,
+    q = 0.8,
+  ) {
     if (!this.ctx || !this.master) return;
     const buf = this.noiseBuffer(dur + 0.05);
     if (!buf) return;
@@ -170,10 +216,14 @@ class SoundEngine {
         this.tone(990, "sine", 0.22, 0.26, undefined, 0.08);
         break;
       case "win":
-        [523, 659, 784, 1046].forEach((f, i) => this.tone(f, "square", 0.18, 0.18, undefined, i * 0.12));
+        [523, 659, 784, 1046].forEach((f, i) =>
+          this.tone(f, "square", 0.18, 0.18, undefined, i * 0.12),
+        );
         break;
       case "lose":
-        [392, 330, 262, 196].forEach((f, i) => this.tone(f, "sawtooth", 0.2, 0.16, undefined, i * 0.13));
+        [392, 330, 262, 196].forEach((f, i) =>
+          this.tone(f, "sawtooth", 0.2, 0.16, undefined, i * 0.13),
+        );
         break;
       case "ui":
         this.tone(700, "sine", 0.05, 0.16, 900);
@@ -200,10 +250,19 @@ class SoundEngine {
       const bar = Math.floor(this.musicStep / 8) % 4;
       const beat = this.musicStep % 8;
       if (beat === 0 || beat === 3 || beat === 6) {
-        this.tone(bass[bar], "sawtooth", 0.2, 0.5, undefined, 0, this.musicGain);
+        this.tone(
+          bass[bar],
+          "sawtooth",
+          0.2,
+          0.5,
+          undefined,
+          0,
+          this.musicGain,
+        );
       }
       const lf = lead[beat];
-      if (lf > 0) this.tone(lf, "square", 0.16, 0.14, undefined, 0, this.musicGain);
+      if (lf > 0)
+        this.tone(lf, "square", 0.16, 0.14, undefined, 0, this.musicGain);
       if (beat === 7 && Math.random() > 0.4) {
         this.noise(0.05, 0.12, 5000, "highpass", 0, 1.2);
       }

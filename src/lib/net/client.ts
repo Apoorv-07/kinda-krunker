@@ -5,7 +5,14 @@
 // interpolation buffers for remote players and host-published bots.
 // ---------------------------------------------------------------------------
 
-import type { HostSnapshot, NetBot, NetEvent, NetPlayer, SyncRequest, SyncResponse } from "./protocol";
+import type {
+  HostSnapshot,
+  NetBot,
+  NetEvent,
+  NetPlayer,
+  SyncRequest,
+  SyncResponse,
+} from "./protocol";
 import { NET } from "./protocol";
 
 const PID_KEY = "bs_player_id";
@@ -15,7 +22,8 @@ export function getPlayerId(): string {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem(PID_KEY);
   if (!id) {
-    id = "pl-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    id =
+      "pl-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     localStorage.setItem(PID_KEY, id);
   }
   return id;
@@ -34,14 +42,20 @@ export function getLocalStackId(): string {
 
 export interface RemoteSample {
   t: number;
-  x: number; y: number; z: number;
-  yaw: number; pitch: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
 }
 
 /** Interpolated transform handed to the renderer. */
 export interface SampleOut {
-  x: number; y: number; z: number;
-  yaw: number; pitch: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
 }
 
 /** Interpolated view of one remote entity. */
@@ -51,11 +65,20 @@ class Interp {
   /** Render-time extrapolation when starved of samples. */
   sample(renderTime: number, out: SampleOut): void {
     if (!this.a && !this.b) return;
-    if (!this.b) { this.copy(this.a!, out); return; }
-    if (!this.a) { this.copy(this.b, out); return; }
+    if (!this.b) {
+      this.copy(this.a!, out);
+      return;
+    }
+    if (!this.a) {
+      this.copy(this.b, out);
+      return;
+    }
     const span = this.b.t - this.a.t;
     const target = this.b.t - NET.TICK_MS * 1.5; // render slightly behind to smooth jitter
-    if (span <= 1) { this.copy(this.b, out); return; }
+    if (span <= 1) {
+      this.copy(this.b, out);
+      return;
+    }
     let k = (target - this.a.t) / span;
     k = k < 0 ? 0 : k > 1.6 ? 1.6 : k;
     out.x = this.a.x + (this.b.x - this.a.x) * k;
@@ -71,7 +94,11 @@ class Interp {
     this.b = s;
   }
   private copy(s: RemoteSample, out: SampleOut) {
-    out.x = s.x; out.y = s.y; out.z = s.z; out.yaw = s.yaw; out.pitch = s.pitch;
+    out.x = s.x;
+    out.y = s.y;
+    out.z = s.z;
+    out.yaw = s.yaw;
+    out.pitch = s.pitch;
   }
 }
 
@@ -85,16 +112,26 @@ function lerpAngle(a: number, b: number, t: number): number {
 export type NetStatus = "idle" | "connecting" | "waiting" | "live" | "error";
 
 export interface MultiplayerCallbacks {
-  onState: (players: NetPlayer[], bots: NetBot[], hostId: string | null, lobby: SyncResponse["lobby"], teamScores: Array<{ team: number; score: number }>) => void;
+  onState: (
+    players: NetPlayer[],
+    bots: NetBot[],
+    hostId: string | null,
+    lobby: SyncResponse["lobby"],
+    teamScores: Array<{ team: number; score: number }>,
+  ) => void;
   onEvents: (events: NetEvent[]) => void;
   onStatus: (status: NetStatus, detail?: string) => void;
   onMatchOver: () => void;
 }
 
 export interface LocalStateOut {
-  x: number; y: number; z: number;
-  yaw: number; pitch: number;
-  hp: number; alive: boolean;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  hp: number;
+  alive: boolean;
   weapon: string;
   deaths: number;
   streak: number;
@@ -115,7 +152,11 @@ export class MultiplayerClient {
   status: NetStatus = "idle";
   /** Sequence numbers already applied — avoids double-applying events. */
   private ackSeq = 0;
-  private pendingDeath: { killedBy?: string; killedByBotId?: number; headshot?: boolean } | null = null;
+  private pendingDeath: {
+    killedBy?: string;
+    killedByBotId?: number;
+    headshot?: boolean;
+  } | null = null;
   /** Outgoing damage claims, keyed by target playerId. */
   private outgoingHits: Array<{ to: string; dmg: number; head: boolean }> = [];
   /** Feed lines generated locally by the host (forwarded in its snapshot). */
@@ -128,10 +169,26 @@ export class MultiplayerClient {
 
   /** Live HP of remote players, applied by the victim's own report. */
   private latest: SyncResponse | null = null;
+  /** Scoreboard rows from the most recent sync, shaped for the results screen. */
+  lastStandings: Array<{
+    name: string;
+    color: number;
+    kills: number;
+    deaths: number;
+    score: number;
+    isPlayer: boolean;
+    team: number;
+  }> = [];
   /** Queued damage against host-simulated bots (guests only). */
-  private queuedBotHits: Array<{ botId: number; dmg: number; head: boolean }> = [];
+  private queuedBotHits: Array<{ botId: number; dmg: number; head: boolean }> =
+    [];
 
-  constructor(code: string, playerId: string, stackId: string, cb: MultiplayerCallbacks) {
+  constructor(
+    code: string,
+    playerId: string,
+    stackId: string,
+    cb: MultiplayerCallbacks,
+  ) {
     this.code = code;
     this.playerId = playerId;
     this.stackId = stackId;
@@ -142,13 +199,17 @@ export class MultiplayerClient {
     return this.hostId !== null && this.hostId === this.playerId;
   }
 
-  async join(name: string): Promise<{ ok: boolean; error?: string }> {
+  async join(name: string): Promise<{ ok: boolean; error?: string; team?: number }> {
     this.setStatus("connecting");
     try {
       const res = await fetch(`/api/lobbies/${this.code}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: this.playerId, name, stackId: this.stackId }),
+        body: JSON.stringify({
+          playerId: this.playerId,
+          name,
+          stackId: this.stackId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -159,7 +220,7 @@ export class MultiplayerClient {
       this.hostId = data.hostId;
       this.players = data.players ?? [];
       this.setStatus(data.lobby.status === "live" ? "live" : "waiting");
-      return { ok: true };
+      return { ok: true, team: data.player?.team };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.setStatus("error", msg);
@@ -195,19 +256,32 @@ export class MultiplayerClient {
 
   /** Victim reports its own death so the server can credit the killer. */
   reportDeath(byPlayerId?: string, byBotId?: number, headshot?: boolean): void {
-    this.pendingDeath = { killedBy: byPlayerId, killedByBotId: byBotId, headshot };
+    this.pendingDeath = {
+      killedBy: byPlayerId,
+      killedByBotId: byBotId,
+      headshot,
+    };
   }
 
   /** Guest → host relay: damage dealt to a host-simulated bot. */
   reportBotHit(botId: number, dmg: number, head: boolean): void {
     this.queuedBotHits.push({ botId, dmg, head });
-    if (this.queuedBotHits.length > 30) this.queuedBotHits.splice(0, this.queuedBotHits.length - 30);
+    if (this.queuedBotHits.length > 30)
+      this.queuedBotHits.splice(0, this.queuedBotHits.length - 30);
   }
 
   /** Host: queue a feed line for broadcast. */
   pushFeed(text: string, head: boolean, from?: string, to?: string): void {
-    this.hostFeed.push({ seq: this.hostFeedSeq++, kind: "feed", text, head, from, to });
-    if (this.hostFeed.length > 24) this.hostFeed.splice(0, this.hostFeed.length - 24);
+    this.hostFeed.push({
+      seq: this.hostFeedSeq++,
+      kind: "feed",
+      text,
+      head,
+      from,
+      to,
+    });
+    if (this.hostFeed.length > 24)
+      this.hostFeed.splice(0, this.hostFeed.length - 24);
   }
 
   private setStatus(s: NetStatus, detail?: string) {
@@ -252,10 +326,18 @@ export class MultiplayerClient {
       this.players = data.players ?? [];
 
       // Host migration: if we were host and no longer are, hand off.
-      if (prevHost === this.playerId && this.hostId !== this.playerId && this.onHostLost) {
+      if (
+        prevHost === this.playerId &&
+        this.hostId !== this.playerId &&
+        this.onHostLost
+      ) {
         this.onHostLost();
       }
-      if (prevHost !== this.playerId && this.hostId === this.playerId && this.onHostGained) {
+      if (
+        prevHost !== this.playerId &&
+        this.hostId === this.playerId &&
+        this.onHostGained
+      ) {
         this.onHostGained();
       }
 
@@ -270,7 +352,13 @@ export class MultiplayerClient {
         this.applyEvents(evs);
       }
 
-      this.cb.onState(this.players, data.bots ?? [], this.hostId, data.lobby, data.teamScores ?? []);
+      this.cb.onState(
+        this.players,
+        data.bots ?? [],
+        this.hostId,
+        data.lobby,
+        data.teamScores ?? [],
+      );
       this.setStatus(data.lobby.status === "live" ? "live" : "waiting");
       if (data.matchOver && this.status === "live") this.cb.onMatchOver();
     } catch {
@@ -285,15 +373,29 @@ export class MultiplayerClient {
   snapshotProvider: (() => HostSnapshot) | null = null;
   onHostLost: (() => void) | null = null;
   onHostGained: (() => void) | null = null;
-  onDamage: ((dmg: number, fromName: string, head: boolean) => void) | null = null;
+  onDamage: ((dmg: number, fromName: string, head: boolean) => void) | null =
+    null;
   onKillFeed: ((text: string, head: boolean) => void) | null = null;
   onStart: (() => void) | null = null;
   /** Host only: guest damage claims against its bots. */
-  onBotHits: ((hits: Array<{ botId: number; dmg: number; head: boolean }>) => void) | null = null;
+  onBotHits:
+    | ((hits: Array<{ botId: number; dmg: number; head: boolean }>) => void)
+    | null = null;
 
   private readLocal(): LocalStateOut {
     if (this.readLocalFn) return this.readLocalFn();
-    return { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: true, weapon: "ar", deaths: 0, streak: 0 };
+    return {
+      x: 0,
+      y: 0,
+      z: 0,
+      yaw: 0,
+      pitch: 0,
+      hp: 100,
+      alive: true,
+      weapon: "ar",
+      deaths: 0,
+      streak: 0,
+    };
   }
 
   private ingestRemote(players: NetPlayer[]): void {
@@ -301,22 +403,30 @@ export class MultiplayerClient {
     for (const p of players) {
       if (p.playerId === this.playerId) continue;
       let it = this.playerInterp.get(p.playerId);
-      if (!it) { it = new Interp(); this.playerInterp.set(p.playerId, it); }
+      if (!it) {
+        it = new Interp();
+        this.playerInterp.set(p.playerId, it);
+      }
       it.push({ t: now, x: p.x, y: p.y, z: p.z, yaw: p.yaw, pitch: p.pitch });
     }
     // Forget players that left.
     const ids = new Set(players.map((p) => p.playerId));
-    for (const key of [...this.playerInterp.keys()]) if (!ids.has(key)) this.playerInterp.delete(key);
+    for (const key of [...this.playerInterp.keys()])
+      if (!ids.has(key)) this.playerInterp.delete(key);
   }
 
   private ingestBots(bots: NetBot[]): void {
     const now = Date.now();
     for (const b of bots) {
       let it = this.botInterp.get(b.id);
-      if (!it) { it = new Interp(); this.botInterp.set(b.id, it); }
+      if (!it) {
+        it = new Interp();
+        this.botInterp.set(b.id, it);
+      }
       it.push({ t: now, x: b.x, y: b.y, z: b.z, yaw: b.yaw, pitch: b.pitch });
     }
-    for (const key of [...this.botInterp.keys()]) if (!bots.some((b) => b.id === key)) this.botInterp.delete(key);
+    for (const key of [...this.botInterp.keys()])
+      if (!bots.some((b) => b.id === key)) this.botInterp.delete(key);
   }
 
   private applyEvents(events: NetEvent[]): void {

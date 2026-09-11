@@ -55,8 +55,12 @@ export function moveBody(e: PhysBody, colliders: BoxDef[], dt: number): void {
 }
 
 function resolveHorizontal(
-  e: PhysBody, colliders: BoxDef[], delta: number,
-  r: number, h: number, axis: "x" | "z",
+  e: PhysBody,
+  colliders: BoxDef[],
+  delta: number,
+  r: number,
+  h: number,
+  axis: "x" | "z",
 ): void {
   if (delta === 0) return;
   const feet = e.pos.y;
@@ -77,20 +81,28 @@ function resolveHorizontal(
       if (e.pos.x + r < bMin || e.pos.x - r > bMax) continue;
       if (e.pos.z + r < b.z - b.d / 2 || e.pos.z - r > b.z + b.d / 2) continue;
       // Push out of the nearest face, regardless of movement direction.
-      e.pos.x = e.pos.x - bMin < bMax - e.pos.x ? bMin - r - EPS : bMax + r + EPS;
+      e.pos.x =
+        e.pos.x - bMin < bMax - e.pos.x ? bMin - r - EPS : bMax + r + EPS;
       e.vel.x = 0;
     } else {
       const bMin = b.z - b.d / 2;
       const bMax = b.z + b.d / 2;
       if (e.pos.z + r < bMin || e.pos.z - r > bMax) continue;
       if (e.pos.x + r < b.x - b.w / 2 || e.pos.x - r > b.x + b.w / 2) continue;
-      e.pos.z = e.pos.z - bMin < bMax - e.pos.z ? bMin - r - EPS : bMax + r + EPS;
+      e.pos.z =
+        e.pos.z - bMin < bMax - e.pos.z ? bMin - r - EPS : bMax + r + EPS;
       e.vel.z = 0;
     }
   }
 }
 
-function resolveY(e: PhysBody, colliders: BoxDef[], delta: number, r: number, h: number): void {
+function resolveY(
+  e: PhysBody,
+  colliders: BoxDef[],
+  delta: number,
+  r: number,
+  h: number,
+): void {
   const feet = e.pos.y;
   const head = feet + h;
   for (let i = 0; i < colliders.length; i++) {
