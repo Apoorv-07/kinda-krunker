@@ -59,8 +59,19 @@ npm run dev
 
 ## Troubleshooting
 
-- **`DATABASE_URL is not set`** at runtime → the env var is missing or added
-  for the wrong environment scope. Rebuild after adding it.
+- **`No database connection string found`** even though the variable shows up
+  in the dashboard → **this is almost always a stale deployment.** Vercel
+  bakes environment variables into a deployment at build time — adding or
+  changing a variable in the dashboard does **not** affect deployments that
+  already exist. Fix: go to **Deployments**, open the latest one, click
+  **⋯ → Redeploy**, and untick "Use existing Build Cache" so it rebuilds
+  fresh. (Or just push any new commit — that also triggers a fresh build with
+  the current env vars.) After redeploying, hit `/api/health` — it should
+  return `{"ok":true}`.
+- The app also accepts `POSTGRES_URL`, `POSTGRES_PRISMA_URL`,
+  `DATABASE_URL_UNPOOLED`, `POSTGRES_URL_NON_POOLING`, or `POSTGRES_URL_NO_SSL`
+  if `DATABASE_URL` itself isn't set — this covers every variant the Vercel
+  Postgres / Neon integration can create.
 - **`relation "lobbies" does not exist`** → run `schema.sql` first.
-- **connection timeout** on serverless → switch to the pooled connection
-  string (see note above).
+- **connection timeout** on serverless → make sure you're using the **pooled**
+  string (host contains `-pooler`), not the direct one.
